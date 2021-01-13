@@ -61,7 +61,7 @@ pub struct VerifierKey {
     /// VerifierKey for variable base curve addition gates
     pub variable_base: ecc::curve_addition::VerifierKey,
     /// VerifierKey for lookup operations
-    // pub lookup: lookup::VerifierKey,
+    pub lookup: lookup::VerifierKey,
     /// VerifierKey for permutation checks
     pub permutation: permutation::VerifierKey,
 }
@@ -103,7 +103,7 @@ impl VerifierKey {
         write_commitment(&self.variable_base.q_variable_group_add, &mut bytes);
 
         // Lookup
-        // write_commitment(&self.lookup, &mut bytes);
+        write_commitment(&self.lookup.q_lookup, &mut bytes);
 
         // Perm
         write_commitment(&self.permutation.left_sigma, &mut bytes);
@@ -137,7 +137,7 @@ impl VerifierKey {
 
         let (q_variable_group_add, rest) = read_commitment(rest)?;
 
-        // let (q_lookup, rest) = read_commitment(rest)?;
+        let (q_lookup, rest) = read_commitment(rest)?;
 
         let (left_sigma, rest) = read_commitment(rest)?;
         let (right_sigma, rest) = read_commitment(rest)?;
@@ -165,14 +165,14 @@ impl VerifierKey {
             q_variable_group_add,
         };
 
+        let lookup = lookup::VerifierKey { q_lookup };
+
         let permutation = permutation::VerifierKey {
             left_sigma,
             right_sigma,
             out_sigma,
             fourth_sigma,
         };
-
-        // let lookup = lookup::VerifierKey { q_lookup };
 
         let verifier_key = VerifierKey {
             n: n as usize,
@@ -182,7 +182,7 @@ impl VerifierKey {
             variable_base,
             fixed_base,
             permutation,
-            // lookup,
+            lookup,
         };
         Ok(verifier_key)
     }
@@ -190,7 +190,7 @@ impl VerifierKey {
     /// Return the serialized size of a [`VerifierKey`]
     pub const fn serialised_size() -> usize {
         const N_SIZE: usize = 8;
-        const NUM_COMMITMENTS: usize = 15;
+        const NUM_COMMITMENTS: usize = 16;
         const COMMITMENT_SIZE: usize = 48;
         N_SIZE + NUM_COMMITMENTS * COMMITMENT_SIZE
     }
@@ -564,6 +564,8 @@ mod test {
 
         let q_logic = Commitment::from_affine(G1Affine::generator());
 
+        let q_lookup = Commitment::from_affine(G1Affine::generator());
+
         let left_sigma = Commitment::from_affine(G1Affine::generator());
         let right_sigma = Commitment::from_affine(G1Affine::generator());
         let out_sigma = Commitment::from_affine(G1Affine::generator());
@@ -592,6 +594,10 @@ mod test {
             q_variable_group_add,
         };
 
+        let lookup = lookup::VerifierKey {
+            q_lookup,
+        };
+
         let permutation = permutation::VerifierKey {
             left_sigma,
             right_sigma,
@@ -607,7 +613,7 @@ mod test {
             fixed_base,
             variable_base,
             permutation,
-            // lookup,
+            lookup,
         };
 
         let verifier_key_bytes = verifier_key.to_bytes();
