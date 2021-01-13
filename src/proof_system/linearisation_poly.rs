@@ -90,6 +90,11 @@ impl ProofEvaluations {
         bytes[416..448].copy_from_slice(&self.out_sigma_eval.to_bytes()[..]);
         bytes[448..480].copy_from_slice(&self.lin_poly_eval.to_bytes()[..]);
         bytes[480..512].copy_from_slice(&self.perm_eval.to_bytes()[..]);
+        bytes[512..544].copy_from_slice(&self.p_next_eval.to_bytes()[..]);
+        bytes[544..576].copy_from_slice(&self.h_1_eval.to_bytes()[..]);
+        bytes[576..608].copy_from_slice(&self.h_1_next_eval.to_bytes()[..]);
+        bytes[608..640].copy_from_slice(&self.h_2_next_eval.to_bytes()[..]);
+        bytes[640..672].copy_from_slice(&self.f_eval.to_bytes()[..]);
 
         bytes
     }
@@ -117,7 +122,6 @@ impl ProofEvaluations {
         let (out_sigma_eval, rest) = read_scalar(rest)?;
         let (lin_poly_eval, rest) = read_scalar(rest)?;
         let (perm_eval, rest) = read_scalar(rest)?;
-
         let (p_next_eval, rest) = read_scalar(rest)?;
         let (h_1_eval, rest) = read_scalar(rest)?;
         let (h_1_next_eval, rest) = read_scalar(rest)?;
@@ -151,7 +155,7 @@ impl ProofEvaluations {
     }
 
     pub const fn serialised_size() -> usize {
-        const NUM_SCALARS: usize = 16;
+        const NUM_SCALARS: usize = 21;
         const SCALAR_SIZE: usize = 32;
         NUM_SCALARS * SCALAR_SIZE
     }

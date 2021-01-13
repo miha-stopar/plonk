@@ -109,14 +109,18 @@ impl Proof {
         bytes[48..96].copy_from_slice(&self.b_comm.0.to_compressed()[..]);
         bytes[96..144].copy_from_slice(&self.c_comm.0.to_compressed()[..]);
         bytes[144..192].copy_from_slice(&self.d_comm.0.to_compressed()[..]);
-        bytes[192..240].copy_from_slice(&self.z_comm.0.to_compressed()[..]);
-        bytes[240..288].copy_from_slice(&self.t_1_comm.0.to_compressed()[..]);
-        bytes[288..336].copy_from_slice(&self.t_2_comm.0.to_compressed()[..]);
-        bytes[336..384].copy_from_slice(&self.t_3_comm.0.to_compressed()[..]);
-        bytes[384..432].copy_from_slice(&self.t_4_comm.0.to_compressed()[..]);
-        bytes[432..480].copy_from_slice(&self.w_z_comm.0.to_compressed()[..]);
-        bytes[480..528].copy_from_slice(&self.w_zw_comm.0.to_compressed()[..]);
-        bytes[528..PROOF_SIZE].copy_from_slice(&self.evaluations.to_bytes()[..]);
+        bytes[192..240].copy_from_slice(&self.f_comm.0.to_compressed()[..]);
+        bytes[240..288].copy_from_slice(&self.z_comm.0.to_compressed()[..]);
+        bytes[288..336].copy_from_slice(&self.p_comm.0.to_compressed()[..]);
+        bytes[336..384].copy_from_slice(&self.h_1_comm.0.to_compressed()[..]);
+        bytes[384..432].copy_from_slice(&self.h_2_comm.0.to_compressed()[..]);
+        bytes[432..480].copy_from_slice(&self.t_1_comm.0.to_compressed()[..]);
+        bytes[480..528].copy_from_slice(&self.t_2_comm.0.to_compressed()[..]);
+        bytes[528..576].copy_from_slice(&self.t_3_comm.0.to_compressed()[..]);
+        bytes[576..624].copy_from_slice(&self.t_4_comm.0.to_compressed()[..]);
+        bytes[624..672].copy_from_slice(&self.w_z_comm.0.to_compressed()[..]);
+        bytes[672..720].copy_from_slice(&self.w_zw_comm.0.to_compressed()[..]);
+        bytes[720..PROOF_SIZE].copy_from_slice(&self.evaluations.to_bytes()[..]);
 
         bytes
     }
@@ -166,7 +170,7 @@ impl Proof {
 
     /// Returns the serialised size of a [`Proof`] object.
     pub const fn serialised_size() -> usize {
-        const NUM_COMMITMENTS: usize = 11;
+        const NUM_COMMITMENTS: usize = 15;
         const COMMITMENT_SIZE: usize = 48;
         (NUM_COMMITMENTS * COMMITMENT_SIZE) + ProofEvaluations::serialised_size()
     }
@@ -549,6 +553,11 @@ mod test {
                 out_sigma_eval: BlsScalar::random(&mut rand::thread_rng()),
                 lin_poly_eval: BlsScalar::random(&mut rand::thread_rng()),
                 perm_eval: BlsScalar::random(&mut rand::thread_rng()),
+                p_next_eval: BlsScalar::random(&mut rand::thread_rng()),
+                h_1_eval: BlsScalar::random(&mut rand::thread_rng()),
+                h_1_next_eval: BlsScalar::random(&mut rand::thread_rng()),
+                h_2_next_eval: BlsScalar::random(&mut rand::thread_rng()),
+                f_eval: BlsScalar::random(&mut rand::thread_rng()),
             },
         };
 
