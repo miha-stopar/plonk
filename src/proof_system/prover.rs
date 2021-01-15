@@ -184,21 +184,23 @@ impl Prover {
         let zeta = transcript.challenge_scalar(b"zeta");
 
         // Compute table f
-        let x_i_scalar = &[&self.to_scalars(&self.cs.x_i)[..], &pad].concat();
-        let y_i_scalar = &[&self.to_scalars(&self.cs.y_i)[..], &pad].concat();
-        let z_i_scalar = &[&self.to_scalars(&self.cs.z_i)[..], &pad].concat();
-        let fourth_i_scalar = &[&self.to_scalars(&self.cs.fourth_i)[..], &pad].concat();
 
-        // Compress table into vector of single elements
-        let compressed_f = MultiSet::compress_four_arity(
+        // Compress all wires into vector of single element queries
+        let compressed_wires = MultiSet::compress_four_arity(
             [
-                &MultiSet::from(x_i_scalar.as_slice()),
-                &MultiSet::from(y_i_scalar.as_slice()),
-                &MultiSet::from(z_i_scalar.as_slice()),
-                &MultiSet::from(fourth_i_scalar.as_slice()),
+                &MultiSet::from(w_l_scalar.as_slice()),
+                &MultiSet::from(w_r_scalar.as_slice()),
+                &MultiSet::from(w_o_scalar.as_slice()),
+                &MultiSet::from(w_4_scalar.as_slice()),
             ],
             zeta,
         );
+
+        // Change non-plookup entries to 0 by multiplying by q_lookup selector
+        let filtered_f: Vec<BlsScalar> = (self.cs.q_lookup.clone(), compressed_wires.0).par_iter().map(|(q, f)| q*f).collect();
+
+        // Remove initial dummy element (zero) to ensure the number of queries is one less than the domain size
+        let compressed_f = MultiSet(filtered_f[1..].to_vec());
 
         // Compute query poly
         let f_poly = Polynomial::from_coefficients_vec(domain.ifft(&compressed_f.0.as_slice()));
@@ -209,19 +211,14 @@ impl Prover {
         // Add f_poly commitment to transcript
         transcript.append_commitment(b"f", &f_poly_commit);
 
-        // Compute table t
-        let t_1_scalar = &[&self.to_scalars(&self.cs.t_1)[..], &pad].concat();
-        let t_2_scalar = &[&self.to_scalars(&self.cs.t_2)[..], &pad].concat();
-        let t_3_scalar = &[&self.to_scalars(&self.cs.t_3)[..], &pad].concat();
-        let t_4_scalar = &[&self.to_scalars(&self.cs.t_4)[..], &pad].concat();
-
         // Compress table into vector of single elements
+        let table_pad = vec![BlsScalar::zero(); domain.size() - self.cs.table_1.len()];
         let compressed_t = MultiSet::compress_four_arity(
             [
-                &MultiSet::from(t_1_scalar.as_slice()),
-                &MultiSet::from(t_2_scalar.as_slice()),
-                &MultiSet::from(t_3_scalar.as_slice()),
-                &MultiSet::from(t_4_scalar.as_slice()),
+                &MultiSet::from([self.cs.table_1.as_slice(), &pad].concat().as_slice()),
+                &MultiSet::from([self.cs.table_2.as_slice(), &pad].concat().as_slice()),
+                &MultiSet::from([self.cs.table_3.as_slice(), &pad].concat().as_slice()),
+                &MultiSet::from([self.cs.table_4.as_slice(), &pad].concat().as_slice()),
             ],
             zeta,
         );
@@ -256,8 +253,11 @@ impl Prover {
         //
         let z_poly_commit = commit_key.commit(&z_poly)?;
 
+        // Add commitment to permutation polynomial to transcript
+        transcript.append_commitment(b"z", &z_poly_commit);
+
         // Compute s, as the sorted and concatenated version of f and t
-        let s = compressed_t.sorted_concat(&compressed_f)?;
+        let s = compressed_t.sorted_concat(&compressed_f).unwrap();
 
         // Compute first and second halves of s, as h_1 and h_2
         let (h_1, h_2) = s.halve();
@@ -269,6 +269,7 @@ impl Prover {
         // Commit to h polys
         let h_1_poly_commit = commit_key.commit(&h_1_poly)?;
         let h_2_poly_commit = commit_key.commit(&h_2_poly)?;
+
 
         // Add h polys to transcript
         transcript.append_commitment(b"h_1", &h_1_poly_commit);
@@ -440,6 +441,7 @@ impl Prover {
         );
         let w_zx_comm = commit_key.commit(&shifted_aggregate_witness)?;
 
+        println!("prover transcript: {:?}", transcript.challenge_scalar(b"check foor matching transcript"));
         // Create Proof
         Ok(Proof {
             a_comm: w_l_poly_commit,
@@ -475,6 +477,7 @@ impl Prover {
 
         if self.prover_key.is_none() {
             // Preprocess circuit
+
             let prover_key = self
                 .cs
                 .preprocess_prover(commit_key, &mut self.preprocessed_transcript)?;

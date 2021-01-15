@@ -190,7 +190,7 @@ where
     fn verify_proof(
         &mut self,
         pub_params: &PublicParameters,
-        verifier_key: &VerifierKey,
+        verifier_key: VerifierKey,
         transcript_initialisation: &'static [u8],
         proof: &Proof,
         pub_inputs: &[PublicInput],
@@ -201,7 +201,7 @@ where
         let mut verifier = Verifier::new(transcript_initialisation);
         // Fill witnesses for Verifier
         self.gadget(verifier.mut_cs())?;
-        verifier.verifier_key = Some(*verifier_key);
+        verifier.verifier_key = Some(verifier_key);
         verifier.verify(proof, &vk, &self.build_pi(pub_inputs)?)
     }
 }
@@ -365,6 +365,6 @@ mod tests {
             PublicInput::BlsScalar(BlsScalar::from(25u64), 0),
             PublicInput::BlsScalar(BlsScalar::from(100u64), 0),
         ];
-        circuit.verify_proof(&pub_params, &verifier_key, b"Test", &proof, &public_inputs2)
+        circuit.verify_proof(&pub_params, verifier_key, b"Test", &proof, &public_inputs2)
     }
 }

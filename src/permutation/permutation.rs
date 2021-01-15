@@ -711,13 +711,15 @@ impl Permutation {
         let h_1_next: Vec<BlsScalar> = [&h_1[1..], &[h_1[0]]].concat();
         let h_2_next: Vec<BlsScalar> = [&h_2[1..], &[h_2[0]]].concat();
 
-        let product_arguments: Vec<BlsScalar> = (f, t, t_next, h_1, h_1_next, h_2, h_2_next)
+        let f_long: Vec<BlsScalar> = [&f, &[BlsScalar::zero()][..]].concat();
+
+        let mut product_arguments: Vec<BlsScalar> = (f_long, t, &t_next, h_1, &h_1_next, h_2, &h_2_next)
             .into_par_iter()
             // Derive the numerator and denominator for each gate plookup gate
             // and pair the results
             .map(|(f, t, t_next, h_1, h_1_next, h_2, h_2_next)| {
                 (
-                    plookup_numerator_irreducible(delta, epsilon, &f, &t, t_next),
+                    plookup_numerator_irreducible(delta, epsilon, &f, &t, &t_next),
                     plookup_denominator_irreducible(
                         delta, epsilon, &h_1, &h_1_next, &h_2, &h_2_next,
                     ),
@@ -726,18 +728,31 @@ impl Permutation {
             .map(|(num, den)| num * den.invert().unwrap())
             .collect();
 
+        // Since the f iterator is one shorter than the t and 
+        //   t_next iterators, the product argument above will 
+        //   not include the final (epsilon * (1+delta) +  t + delta * t_next)
+        //   factor, and so it must be appended.
+/*
+        product_arguments.push(
+            product_arguments[n-2] 
+            * (epsilon * (BlsScalar::one() + delta) + t[n-1] + delta * t_next[n-1])
+            * plookup_denominator_irreducible(delta, epsilon, &h_1[n-1], &h_1_next[n-1], &h_2[n-1], &h_2_next[n-1])
+        );
+*/
+        println!("product arguments {:?}", product_arguments);
+        println!("epsilon {:?}", epsilon);
+
         let mut state = BlsScalar::one();
-        let mut p = Vec::with_capacity(n - 1);
+        let mut p = Vec::with_capacity(n);
         p.push(state);
-
         // product_arguments.into_iter().map(|f| state)
-
         for s in product_arguments {
             state *= s;
             p.push(state);
         }
 
         // Remove the last(n+1'th) element
+        println!("p: {:?}", p);
         p.remove(n);
 
         assert_eq!(n, p.len());
@@ -751,12 +766,11 @@ fn plookup_numerator_irreducible(
     epsilon: &BlsScalar,
     f: &BlsScalar,
     t: &BlsScalar,
-    t_next: BlsScalar,
+    t_next: &BlsScalar,
 ) -> BlsScalar {
-    let prod_1 = epsilon * f;
+    let prod_1 = epsilon + f;
     let prod_2 = BlsScalar::one() + delta;
     let prod_3 = (epsilon * prod_2) + t + (delta * t_next);
-
     prod_1 * prod_2 * prod_3
 }
 
@@ -769,8 +783,8 @@ fn plookup_denominator_irreducible(
     h_2_next: &BlsScalar,
 ) -> BlsScalar {
     let epsilon_plus_one_delta = epsilon * (BlsScalar::one() + delta);
-    let prod_1 = epsilon + h_1 + (h_1_next * delta);
-    let prod_2 = epsilon + h_2 + (h_2_next * delta);
+    let prod_1 = epsilon_plus_one_delta + h_1 + (h_1_next * delta);
+    let prod_2 = epsilon_plus_one_delta + h_2 + (h_2_next * delta);
 
     prod_1 * prod_2
 }

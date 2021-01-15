@@ -67,6 +67,9 @@ pub struct ProofEvaluations {
 
     // Evaluation of query polynomial at `z * root of unity`
     pub f_eval: BlsScalar,
+
+    // Evaluation of lookup selector polynomial at `z`
+    pub q_lookup_eval: BlsScalar,
 }
 
 impl ProofEvaluations {
@@ -95,6 +98,7 @@ impl ProofEvaluations {
         bytes[576..608].copy_from_slice(&self.h_1_next_eval.to_bytes()[..]);
         bytes[608..640].copy_from_slice(&self.h_2_next_eval.to_bytes()[..]);
         bytes[640..672].copy_from_slice(&self.f_eval.to_bytes()[..]);
+        bytes[672..704].copy_from_slice(&self.q_lookup_eval.to_bytes()[..]);
 
         bytes
     }
@@ -126,7 +130,8 @@ impl ProofEvaluations {
         let (h_1_eval, rest) = read_scalar(rest)?;
         let (h_1_next_eval, rest) = read_scalar(rest)?;
         let (h_2_next_eval, rest) = read_scalar(rest)?;
-        let (f_eval, _) = read_scalar(rest)?;
+        let (f_eval, rest) = read_scalar(rest)?;
+        let (q_lookup_eval, _) = read_scalar(rest)?;
 
         let proof_evals = ProofEvaluations {
             a_eval,
@@ -150,12 +155,13 @@ impl ProofEvaluations {
             h_1_next_eval,
             h_2_next_eval,
             f_eval,
+            q_lookup_eval,
         };
         Ok(proof_evals)
     }
 
     pub const fn serialised_size() -> usize {
-        const NUM_SCALARS: usize = 21;
+        const NUM_SCALARS: usize = 22;
         const SCALAR_SIZE: usize = 32;
         NUM_SCALARS * SCALAR_SIZE
     }
@@ -220,6 +226,7 @@ pub fn compute(
     let h_1_next_eval = h_1_poly.evaluate(&(z_challenge * domain.group_gen));
     let h_2_next_eval = h_2_poly.evaluate(&(z_challenge * domain.group_gen));
     let f_eval = f_poly.evaluate(z_challenge);
+    let q_lookup_eval = prover_key.lookup.q_lookup.0.evaluate(z_challenge);
 
     let f_1 = compute_circuit_satisfiability(
         (
@@ -281,6 +288,7 @@ pub fn compute(
                 h_1_next_eval,
                 h_2_next_eval,
                 f_eval,
+                q_lookup_eval,
             },
             quot_eval,
         },

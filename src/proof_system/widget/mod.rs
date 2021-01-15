@@ -46,7 +46,7 @@ pub struct ProverKey {
 }
 
 /// PLONK circuit verification key
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct VerifierKey {
     /// Circuit size
     pub n: usize,
@@ -72,9 +72,9 @@ impl_serde!(VerifierKey);
 impl VerifierKey {
     /// Serialises a VerifierKey to bytes
     pub fn to_bytes(&self) -> Vec<u8> {
-        use crate::serialisation::{write_commitment, write_u64};
+        use crate::serialisation::{write_commitment, write_u64, write_polynomial};
 
-        let mut bytes = Vec::with_capacity(VerifierKey::serialised_size());
+        let mut bytes = Vec::with_capacity(VerifierKey::serialised_size(self.n));
 
         // Circuit size
         // Assuming that circuits will not exceed 2^64 we cast `usize` to `u64`
@@ -104,6 +104,10 @@ impl VerifierKey {
 
         // Lookup
         write_commitment(&self.lookup.q_lookup, &mut bytes);
+        write_polynomial(&self.lookup.table_1_poly, &mut bytes);
+        write_polynomial(&self.lookup.table_2_poly, &mut bytes);
+        write_polynomial(&self.lookup.table_3_poly, &mut bytes);
+        write_polynomial(&self.lookup.table_4_poly, &mut bytes);
 
         // Perm
         write_commitment(&self.permutation.left_sigma, &mut bytes);
@@ -115,11 +119,11 @@ impl VerifierKey {
     }
     /// Deserialise a slice of bytes into a VerifierKey
     pub fn from_bytes(bytes: &[u8]) -> Result<VerifierKey, Error> {
-        use crate::serialisation::{read_commitment, read_u64};
-
-        assert_eq!(bytes.len(), VerifierKey::serialised_size());
+        use crate::serialisation::{read_commitment, read_u64, read_polynomial};
 
         let (n, rest) = read_u64(bytes)?;
+
+        assert_eq!(bytes.len(), VerifierKey::serialised_size(n as usize));
 
         let (q_m, rest) = read_commitment(rest)?;
         let (q_l, rest) = read_commitment(rest)?;
@@ -138,6 +142,10 @@ impl VerifierKey {
         let (q_variable_group_add, rest) = read_commitment(rest)?;
 
         let (q_lookup, rest) = read_commitment(rest)?;
+        let (table_1_poly, rest) = read_polynomial(rest)?;
+        let (table_2_poly, rest) = read_polynomial(rest)?;
+        let (table_3_poly, rest) = read_polynomial(rest)?;
+        let (table_4_poly, rest) = read_polynomial(rest)?;
 
         let (left_sigma, rest) = read_commitment(rest)?;
         let (right_sigma, rest) = read_commitment(rest)?;
@@ -165,7 +173,13 @@ impl VerifierKey {
             q_variable_group_add,
         };
 
-        let lookup = lookup::VerifierKey { q_lookup };
+        let lookup = lookup::VerifierKey { 
+            q_lookup,
+            table_1_poly,
+            table_2_poly,
+            table_3_poly,
+            table_4_poly,
+        };
 
         let permutation = permutation::VerifierKey {
             left_sigma,
@@ -188,11 +202,15 @@ impl VerifierKey {
     }
 
     /// Return the serialized size of a [`VerifierKey`]
-    pub const fn serialised_size() -> usize {
+    pub const fn serialised_size(n: usize) -> usize {
         const N_SIZE: usize = 8;
         const NUM_COMMITMENTS: usize = 16;
         const COMMITMENT_SIZE: usize = 48;
-        N_SIZE + NUM_COMMITMENTS * COMMITMENT_SIZE
+        const NUM_POLYNOMIALS: usize = 4;
+        const SCALAR_SIZE: usize = 32;
+
+        // Polynomials are serialized as (number of coefficients, list of coefficients)
+        N_SIZE + NUM_COMMITMENTS * COMMITMENT_SIZE + (n * SCALAR_SIZE + N_SIZE) * NUM_POLYNOMIALS
     }
 
     /// Adds the circuit description to the transcript
@@ -545,7 +563,11 @@ mod test {
     #[test]
     fn test_serialise_deserialise_verifier_key() {
         use crate::commitment_scheme::kzg10::Commitment;
+        use crate::fft::Polynomial;
         use dusk_bls12_381::G1Affine;
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
 
         let n = 2usize.pow(5);
 
@@ -565,6 +587,11 @@ mod test {
         let q_logic = Commitment::from_affine(G1Affine::generator());
 
         let q_lookup = Commitment::from_affine(G1Affine::generator());
+
+        let table_1_poly = Polynomial::rand(n-1, &mut rng);
+        let table_2_poly = Polynomial::rand(n-1, &mut rng);
+        let table_3_poly = Polynomial::rand(n-1, &mut rng);
+        let table_4_poly = Polynomial::rand(n-1, &mut rng);
 
         let left_sigma = Commitment::from_affine(G1Affine::generator());
         let right_sigma = Commitment::from_affine(G1Affine::generator());
@@ -596,6 +623,10 @@ mod test {
 
         let lookup = lookup::VerifierKey {
             q_lookup,
+            table_1_poly,
+            table_2_poly,
+            table_3_poly,
+            table_4_poly,
         };
 
         let permutation = permutation::VerifierKey {

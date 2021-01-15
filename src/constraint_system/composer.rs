@@ -69,17 +69,11 @@ pub struct StandardComposer {
     pub(crate) w_o: Vec<Variable>,
     pub(crate) w_4: Vec<Variable>,
 
-    // Lookup queries
-    pub(crate) x_i: Vec<Variable>,
-    pub(crate) y_i: Vec<Variable>,
-    pub(crate) z_i: Vec<Variable>,
-    pub(crate) fourth_i: Vec<Variable>,
-
     // Table values
-    pub(crate) t_1: Vec<Variable>,
-    pub(crate) t_2: Vec<Variable>,
-    pub(crate) t_3: Vec<Variable>,
-    pub(crate) t_4: Vec<Variable>,
+    pub(crate) table_1: Vec<BlsScalar>,
+    pub(crate) table_2: Vec<BlsScalar>,
+    pub(crate) table_3: Vec<BlsScalar>,
+    pub(crate) table_4: Vec<BlsScalar>,
 
     /// A zero variable that is a part of the circuit description.
     /// We reserve a variable to be zero in the system
@@ -154,17 +148,12 @@ impl StandardComposer {
             w_o: Vec::with_capacity(expected_size),
             w_4: Vec::with_capacity(expected_size),
 
-            x_i: Vec::with_capacity(expected_size),
-            y_i: Vec::with_capacity(expected_size),
-            z_i: Vec::with_capacity(expected_size),
-            fourth_i: Vec::with_capacity(expected_size),
-
             zero_var: Variable(0),
 
-            t_1: Vec::with_capacity(expected_size),
-            t_2: Vec::with_capacity(expected_size),
-            t_3: Vec::with_capacity(expected_size),
-            t_4: Vec::with_capacity(expected_size),
+            table_1: Vec::with_capacity(expected_size),
+            table_2: Vec::with_capacity(expected_size),
+            table_3: Vec::with_capacity(expected_size),
+            table_4: Vec::with_capacity(expected_size),
 
             variables: HashMap::with_capacity(expected_size),
 
@@ -176,7 +165,7 @@ impl StandardComposer {
 
         // Add dummy constraints
         composer.add_dummy_constraints();
-
+        
         composer
     }
 
@@ -199,15 +188,16 @@ impl StandardComposer {
         a: Variable,
         b: Variable,
         c: Variable,
+        d: Variable,
     ) -> Result<(), PreProcessingError> {
         // if self.x_i.is_none() {
         //     return Err(PreProcessingError::LookupTableMissing);
         // }
 
         self.w_l.push(a);
-        self.w_l.push(a);
-        self.w_l.push(a);
-        self.w_4.push(self.zero_var);
+        self.w_r.push(b);
+        self.w_o.push(c);
+        self.w_4.push(d);
         self.q_l.push(BlsScalar::zero());
         self.q_r.push(BlsScalar::zero());
 
@@ -290,6 +280,10 @@ impl StandardComposer {
             -constant,
             pi,
         );
+        self.table_1.push(BlsScalar::zero());
+        self.table_2.push(BlsScalar::zero());
+        self.table_3.push(BlsScalar::zero());
+        self.table_4.push(BlsScalar::zero());
     }
 
     /// Asserts that two variables are the same
@@ -369,7 +363,8 @@ impl StandardComposer {
         self.q_logic.push(BlsScalar::zero());
         self.q_fixed_group_add.push(BlsScalar::zero());
         self.q_variable_group_add.push(BlsScalar::zero());
-        self.q_lookup.push(BlsScalar::zero());
+        self.q_lookup.push(BlsScalar::from(1));
+
         self.public_inputs.push(BlsScalar::zero());
         let var_six = self.add_input(BlsScalar::from(6));
         let var_one = self.add_input(BlsScalar::from(1));
@@ -379,6 +374,12 @@ impl StandardComposer {
         self.w_r.push(var_seven);
         self.w_o.push(var_min_twenty);
         self.w_4.push(var_one);
+
+        self.table_1.push(BlsScalar::from(6));
+        self.table_2.push(BlsScalar::from(7));
+        self.table_3.push(-BlsScalar::from(20));
+        self.table_4.push(BlsScalar::from(1));
+
         self.perm
             .add_variables_to_map(var_six, var_seven, var_min_twenty, var_one, self.n);
         self.n += 1;
@@ -394,12 +395,19 @@ impl StandardComposer {
         self.q_logic.push(BlsScalar::zero());
         self.q_fixed_group_add.push(BlsScalar::zero());
         self.q_variable_group_add.push(BlsScalar::zero());
-        self.q_lookup.push(BlsScalar::zero());
+        self.q_lookup.push(BlsScalar::from(1));
         self.public_inputs.push(BlsScalar::zero());
+
         self.w_l.push(var_min_twenty);
         self.w_r.push(var_six);
         self.w_o.push(var_seven);
         self.w_4.push(self.zero_var);
+
+        self.table_1.push(-BlsScalar::from(20));
+        self.table_2.push(BlsScalar::from(6));
+        self.table_3.push(BlsScalar::from(7));
+        self.table_4.push(BlsScalar::zero());
+
         self.perm
             .add_variables_to_map(var_min_twenty, var_six, var_seven, self.zero_var, self.n);
         self.n += 1;

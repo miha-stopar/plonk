@@ -36,8 +36,6 @@ pub(crate) struct SelectorPolynomials {
     right_sigma: Polynomial,
     out_sigma: Polynomial,
     fourth_sigma: Polynomial,
-    // table_poly: Polynomial,
-    // query_poly: Polynomial,
 }
 
 impl StandardComposer {
@@ -62,17 +60,17 @@ impl StandardComposer {
         self.q_logic.extend(zeroes_scalar.iter());
         self.q_fixed_group_add.extend(zeroes_scalar.iter());
         self.q_variable_group_add.extend(zeroes_scalar.iter());
-        // self.q_lookup.extend(zeroes_scalar.iter());
+        self.q_lookup.extend(zeroes_scalar.iter());
 
         self.w_l.extend(zeroes_var.iter());
         self.w_r.extend(zeroes_var.iter());
         self.w_o.extend(zeroes_var.iter());
         self.w_4.extend(zeroes_var.iter());
 
-        self.x_i.extend(zeroes_var.iter());
-        self.y_i.extend(zeroes_var.iter());
-        self.z_i.extend(zeroes_var.iter());
-        self.fourth_i.extend(zeroes_var.iter());
+        self.table_1.extend(zeroes_scalar.iter());
+        self.table_2.extend(zeroes_scalar.iter());
+        self.table_3.extend(zeroes_scalar.iter());
+        self.table_4.extend(zeroes_scalar.iter());
 
         self.n += diff;
     }
@@ -91,10 +89,14 @@ impl StandardComposer {
             && self.q_logic.len() == k
             && self.q_fixed_group_add.len() == k
             && self.q_variable_group_add.len() == k
-            // && self.q_lookup.len() == k
+            && self.q_lookup.len() == k
             && self.w_l.len() == k
             && self.w_r.len() == k
             && self.w_o.len() == k
+            && self.table_1.len() == k
+            && self.table_2.len() == k
+            && self.table_3.len() == k
+            && self.table_4.len() == k            
         {
             Ok(())
         } else {
@@ -263,6 +265,10 @@ impl StandardComposer {
         let q_variable_group_add_poly =
             Polynomial::from_coefficients_slice(&domain.ifft(&self.q_variable_group_add));
         let q_lookup_poly = Polynomial::from_coefficients_slice(&domain.ifft(&self.q_lookup));
+        let table_1_poly = Polynomial::from_coefficients_slice(&domain.ifft(&self.table_1));
+        let table_2_poly = Polynomial::from_coefficients_slice(&domain.ifft(&self.table_2));
+        let table_3_poly = Polynomial::from_coefficients_slice(&domain.ifft(&self.table_3));
+        let table_4_poly = Polynomial::from_coefficients_slice(&domain.ifft(&self.table_4));
 
         // 2. Compute the sigma polynomials
         let (left_sigma_poly, right_sigma_poly, out_sigma_poly, fourth_sigma_poly) =
@@ -323,6 +329,10 @@ impl StandardComposer {
         // Verifier Key for lookup operations
         let lookup_verifier_key = widget::lookup::VerifierKey {
             q_lookup: q_lookup_poly_commit,
+            table_1_poly,
+            table_2_poly,
+            table_3_poly,
+            table_4_poly,
         };
 
         // Verifier Key for permutation argument
@@ -400,5 +410,10 @@ mod test {
         assert!(composer.w_l.len() == size);
         assert!(composer.w_r.len() == size);
         assert!(composer.w_o.len() == size);
+        assert!(composer.w_4.len() == size);
+        assert!(composer.table_1.len() == size);
+        assert!(composer.table_2.len() == size);
+        assert!(composer.table_3.len() == size);
+        assert!(composer.table_4.len() == size);
     }
 }

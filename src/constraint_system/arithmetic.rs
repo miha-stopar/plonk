@@ -75,6 +75,11 @@ impl StandardComposer {
         self.q_variable_group_add.push(BlsScalar::zero());
         self.q_lookup.push(BlsScalar::zero());
 
+        self.table_1.push(BlsScalar::zero());
+        self.table_2.push(BlsScalar::zero());
+        self.table_3.push(BlsScalar::zero());
+        self.table_4.push(BlsScalar::zero());
+
         self.public_inputs.push(pi);
 
         self.perm.add_variables_to_map(a, b, c, d, self.n);
