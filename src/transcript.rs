@@ -38,7 +38,7 @@ impl TranscriptProtocol for Transcript {
     fn challenge_scalar(&mut self, label: &'static [u8]) -> BlsScalar {
         let mut buf = [0u8; 64];
         self.challenge_bytes(label, &mut buf);
-
+        println!("challenge: {:?}       {:?}", std::str::from_utf8(label), BlsScalar::from_bytes_wide(&buf));
         BlsScalar::from_bytes_wide(&buf)
     }
 

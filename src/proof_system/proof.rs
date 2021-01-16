@@ -184,7 +184,7 @@ impl Proof {
         pub_inputs: &[BlsScalar],
     ) -> Result<(), Error> {
         let domain = EvaluationDomain::new(verifier_key.n)?;
-
+        println!("Verifier Process Begins");
         // Subgroup checks are done when the proof is deserialised.
 
         // In order for the Verifier and Prover to have the same view in the non-interactive setting
@@ -275,9 +275,11 @@ impl Proof {
             &z_h_eval,
             &l1_eval,
             &ln_eval,
-            &self.evaluations.perm_eval,
+            &self.evaluations.z_next_eval,
             &zeta,
         );
+
+        println!("verifier t_eval {:?}", t_eval);
 
         // Compute commitment to quotient polynomial
         // This method is necessary as we pass the `un-splitted` variation to our commitment scheme
@@ -298,7 +300,7 @@ impl Proof {
         transcript.append_scalar(b"q_c_eval", &self.evaluations.q_c_eval);
         transcript.append_scalar(b"q_l_eval", &self.evaluations.q_l_eval);
         transcript.append_scalar(b"q_r_eval", &self.evaluations.q_r_eval);
-        transcript.append_scalar(b"perm_eval", &self.evaluations.perm_eval);
+        transcript.append_scalar(b"z_next_eval", &self.evaluations.z_next_eval);
         transcript.append_scalar(b"t_eval", &t_eval);
         transcript.append_scalar(b"r_eval", &self.evaluations.lin_poly_eval);
 
@@ -352,7 +354,7 @@ impl Proof {
 
         // Compose the shifted aggregate proof
         let mut shifted_aggregate_proof = AggregateProof::with_witness(self.w_zw_comm);
-        shifted_aggregate_proof.add_part((self.evaluations.perm_eval, self.z_comm));
+        shifted_aggregate_proof.add_part((self.evaluations.z_next_eval, self.z_comm));
         shifted_aggregate_proof.add_part((self.evaluations.a_next_eval, self.a_comm));
         shifted_aggregate_proof.add_part((self.evaluations.b_next_eval, self.b_comm));
         shifted_aggregate_proof.add_part((self.evaluations.d_next_eval, self.d_comm));
@@ -404,25 +406,25 @@ impl Proof {
         // r + PI(z)
         let a = self.evaluations.lin_poly_eval + pi_eval;
 
-        // a + beta * sigma_1 + gamma
-        let beta_sig1 = beta * self.evaluations.left_sigma_eval;
+        // a + beta * sigma_1_next + gamma
+        let beta_sig1 = beta * self.evaluations.left_sigma_next_eval;
         let b_0 = self.evaluations.a_eval + beta_sig1 + gamma;
 
-        // b+ beta * sigma_2 + gamma
-        let beta_sig2 = beta * self.evaluations.right_sigma_eval;
+        // b + beta * sigma_2_next + gamma
+        let beta_sig2 = beta * self.evaluations.right_sigma_next_eval;
         let b_1 = self.evaluations.b_eval + beta_sig2 + gamma;
 
-        // c+ beta * sigma_3 + gamma
-        let beta_sig3 = beta * self.evaluations.out_sigma_eval;
+        // c+ beta * sigma_3_next + gamma
+        let beta_sig3 = beta * self.evaluations.out_sigma_next_eval;
         let b_2 = self.evaluations.c_eval + beta_sig3 + gamma;
 
         // ((d + gamma) * z_hat) * alpha
         let b_3 = (self.evaluations.d_eval + gamma) * z_hat_eval * alpha;
 
-        let b = b_0 * b_1 * b_2 * b_3;
+        let b = - b_0 * b_1 * b_2 * b_3;
 
-        // l_1(z) * alpha^2
-        let c = l1_eval * (alpha_sq + alpha_sq.square());
+        // - l_1(z) * alpha^2 - l_1(z) * alpha^4
+        let c = - l1_eval * (alpha_sq + alpha_sq.square());
 
         // (a + b*zeta + c*zeta^2 + d*zeta^3)
         let abcd_zeta = self.evaluations.a_eval +  self.evaluations.b_eval * zeta + self.evaluations.c_eval * zeta.square() + self.evaluations.d_eval * zeta * zeta.square();
@@ -430,27 +432,27 @@ impl Proof {
         // q_lookup(z) * (a + b*zeta + c*zeta^2 + d*zeta^3) * alpha^3
         let d = self.evaluations.q_lookup_eval * abcd_zeta * alpha_sq * alpha;
 
-        // epsilon*(1 + delta)
+        // epsilon * (1 + delta)
         let e_d = epsilon * (BlsScalar::one() + delta);
 
         // epsilon * (1 + delta) + h1 + delta * h1_next
-        let e_d_h1 = e_d * self.evaluations.h_1_eval + delta * self.evaluations.h_1_next_eval;
+        let e_d_h1 = e_d + self.evaluations.h_1_eval + delta * self.evaluations.h_1_next_eval;
         
         // epsilon * (1 + delta) + delta * h2_next
         let e_d_h2 = e_d + delta * self.evaluations.h_2_next_eval;
 
         // Assuming omega ^ n = 1
         // (zeta - omega^n) * p_next * (eps * (delta + 1) + h1 + delta * h1_next) * (eps * (delta + 1) + delta * h2_next) * alpha^5
-        let e = (zeta - BlsScalar::one()) * self.evaluations.p_next_eval * e_d_h1 * e_d_h2 * alpha_sq * alpha_sq * alpha;
+        let e = - (zeta - BlsScalar::one()) * self.evaluations.p_next_eval * e_d_h1 * e_d_h2 * alpha_sq * alpha_sq * alpha;
 
         // alpha ^ 6
         let alpha_six = alpha_sq * alpha_sq * alpha_sq;
 
         // l_n(z) * h2_next * alpha^6 - l_n(z) * alpha^7
-        let f = ln_eval * alpha_six * (self.evaluations.h_2_next_eval + alpha);
+        let f = - ln_eval * alpha_six * (self.evaluations.h_2_next_eval + alpha);
         
         // Return quot_eval
-        (a - b - c + d - e - f) * z_h_eval.invert().unwrap()
+        (a + b + c + d + e + f) * z_h_eval.invert().unwrap()
     }
 
     fn compute_quotient_commitment(&self, z_challenge: &BlsScalar, n: usize) -> Commitment {
@@ -634,8 +636,11 @@ mod test {
                 left_sigma_eval: BlsScalar::random(&mut rand::thread_rng()),
                 right_sigma_eval: BlsScalar::random(&mut rand::thread_rng()),
                 out_sigma_eval: BlsScalar::random(&mut rand::thread_rng()),
+                left_sigma_next_eval: BlsScalar::random(&mut rand::thread_rng()),
+                right_sigma_next_eval: BlsScalar::random(&mut rand::thread_rng()),
+                out_sigma_next_eval: BlsScalar::random(&mut rand::thread_rng()),
                 lin_poly_eval: BlsScalar::random(&mut rand::thread_rng()),
-                perm_eval: BlsScalar::random(&mut rand::thread_rng()),
+                z_next_eval: BlsScalar::random(&mut rand::thread_rng()),
                 p_next_eval: BlsScalar::random(&mut rand::thread_rng()),
                 h_1_eval: BlsScalar::random(&mut rand::thread_rng()),
                 h_1_next_eval: BlsScalar::random(&mut rand::thread_rng()),

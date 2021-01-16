@@ -145,7 +145,7 @@ impl Prover {
         prover_key: &ProverKey,
     ) -> Result<Proof, Error> {
         let domain = EvaluationDomain::new(self.cs.circuit_size())?;
-
+        println!("Prover Process Begins");
         // Since the caller is passing a pre-processed circuit
         // We assume that the Transcript has been seeded with the preprocessed
         // Commitments
@@ -379,7 +379,7 @@ impl Prover {
             &h_2_poly,
             &f_poly,
         );
-
+        println!("prover t_eval {:?}", &evaluations.quot_eval);
         // Add evaluations to transcript
         transcript.append_scalar(b"a_eval", &evaluations.proof.a_eval);
         transcript.append_scalar(b"b_eval", &evaluations.proof.b_eval);
@@ -395,7 +395,7 @@ impl Prover {
         transcript.append_scalar(b"q_c_eval", &evaluations.proof.q_c_eval);
         transcript.append_scalar(b"q_l_eval", &evaluations.proof.q_l_eval);
         transcript.append_scalar(b"q_r_eval", &evaluations.proof.q_r_eval);
-        transcript.append_scalar(b"perm_eval", &evaluations.proof.perm_eval);
+        transcript.append_scalar(b"z_next_eval", &evaluations.proof.z_next_eval);
         transcript.append_scalar(b"t_eval", &evaluations.quot_eval);
         transcript.append_scalar(b"r_eval", &evaluations.proof.lin_poly_eval);
 

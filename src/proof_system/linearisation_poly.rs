@@ -47,11 +47,18 @@ pub struct ProofEvaluations {
     // Evaluation of the out sigma polynomial at `z`
     pub out_sigma_eval: BlsScalar,
 
+    // Evaluation of the left sigma polynomial at `z * root of unity`
+    pub left_sigma_next_eval: BlsScalar,
+    // Evaluation of the right sigma polynomial at `z * root of unity`
+    pub right_sigma_next_eval: BlsScalar,
+    // Evaluation of the out sigma polynomial at `z * root of unity`
+    pub out_sigma_next_eval: BlsScalar,
+
     // Evaluation of the linearisation sigma polynomial at `z`
     pub lin_poly_eval: BlsScalar,
 
     // (Shifted) Evaluation of the permutation polynomial at `z * root of unity`
-    pub perm_eval: BlsScalar,
+    pub z_next_eval: BlsScalar,
 
     // (Shifted) evaluation of plookup permutation polynomial at `z * root of unity`
     pub p_next_eval: BlsScalar,
@@ -91,14 +98,19 @@ impl ProofEvaluations {
         bytes[352..384].copy_from_slice(&self.left_sigma_eval.to_bytes()[..]);
         bytes[384..416].copy_from_slice(&self.right_sigma_eval.to_bytes()[..]);
         bytes[416..448].copy_from_slice(&self.out_sigma_eval.to_bytes()[..]);
-        bytes[448..480].copy_from_slice(&self.lin_poly_eval.to_bytes()[..]);
-        bytes[480..512].copy_from_slice(&self.perm_eval.to_bytes()[..]);
-        bytes[512..544].copy_from_slice(&self.p_next_eval.to_bytes()[..]);
-        bytes[544..576].copy_from_slice(&self.h_1_eval.to_bytes()[..]);
-        bytes[576..608].copy_from_slice(&self.h_1_next_eval.to_bytes()[..]);
-        bytes[608..640].copy_from_slice(&self.h_2_next_eval.to_bytes()[..]);
-        bytes[640..672].copy_from_slice(&self.f_eval.to_bytes()[..]);
-        bytes[672..704].copy_from_slice(&self.q_lookup_eval.to_bytes()[..]);
+
+        bytes[448..480].copy_from_slice(&self.left_sigma_next_eval.to_bytes()[..]);
+        bytes[480..512].copy_from_slice(&self.right_sigma_next_eval.to_bytes()[..]);
+        bytes[512..544].copy_from_slice(&self.out_sigma_next_eval.to_bytes()[..]);
+
+        bytes[544..576].copy_from_slice(&self.lin_poly_eval.to_bytes()[..]);
+        bytes[576..608].copy_from_slice(&self.z_next_eval.to_bytes()[..]);
+        bytes[608..640].copy_from_slice(&self.p_next_eval.to_bytes()[..]);
+        bytes[640..672].copy_from_slice(&self.h_1_eval.to_bytes()[..]);
+        bytes[672..704].copy_from_slice(&self.h_1_next_eval.to_bytes()[..]);
+        bytes[704..736].copy_from_slice(&self.h_2_next_eval.to_bytes()[..]);
+        bytes[736..768].copy_from_slice(&self.f_eval.to_bytes()[..]);
+        bytes[768..800].copy_from_slice(&self.q_lookup_eval.to_bytes()[..]);
 
         bytes
     }
@@ -124,8 +136,11 @@ impl ProofEvaluations {
         let (left_sigma_eval, rest) = read_scalar(rest)?;
         let (right_sigma_eval, rest) = read_scalar(rest)?;
         let (out_sigma_eval, rest) = read_scalar(rest)?;
+        let (left_sigma_next_eval, rest) = read_scalar(rest)?;
+        let (right_sigma_next_eval, rest) = read_scalar(rest)?;
+        let (out_sigma_next_eval, rest) = read_scalar(rest)?;
         let (lin_poly_eval, rest) = read_scalar(rest)?;
-        let (perm_eval, rest) = read_scalar(rest)?;
+        let (z_next_eval, rest) = read_scalar(rest)?;
         let (p_next_eval, rest) = read_scalar(rest)?;
         let (h_1_eval, rest) = read_scalar(rest)?;
         let (h_1_next_eval, rest) = read_scalar(rest)?;
@@ -148,8 +163,11 @@ impl ProofEvaluations {
             left_sigma_eval,
             right_sigma_eval,
             out_sigma_eval,
+            left_sigma_next_eval,
+            right_sigma_next_eval,
+            out_sigma_next_eval,
             lin_poly_eval,
-            perm_eval,
+            z_next_eval,
             p_next_eval,
             h_1_eval,
             h_1_next_eval,
@@ -161,7 +179,7 @@ impl ProofEvaluations {
     }
 
     pub const fn serialised_size() -> usize {
-        const NUM_SCALARS: usize = 22;
+        const NUM_SCALARS: usize = 25;
         const SCALAR_SIZE: usize = 32;
         NUM_SCALARS * SCALAR_SIZE
     }
@@ -211,6 +229,9 @@ pub fn compute(
     let left_sigma_eval = prover_key.permutation.left_sigma.0.evaluate(z_challenge);
     let right_sigma_eval = prover_key.permutation.right_sigma.0.evaluate(z_challenge);
     let out_sigma_eval = prover_key.permutation.out_sigma.0.evaluate(z_challenge);
+    let left_sigma_next_eval = prover_key.permutation.left_sigma.0.evaluate(&(z_challenge * domain.group_gen));
+    let right_sigma_next_eval = prover_key.permutation.right_sigma.0.evaluate(&(z_challenge * domain.group_gen));
+    let out_sigma_next_eval = prover_key.permutation.out_sigma.0.evaluate(&(z_challenge * domain.group_gen));
     let q_arith_eval = prover_key.arithmetic.q_arith.0.evaluate(z_challenge);
     let q_c_eval = prover_key.logic.q_c.0.evaluate(z_challenge);
     let q_l_eval = prover_key.fixed_base.q_l.0.evaluate(z_challenge);
@@ -219,7 +240,7 @@ pub fn compute(
     let a_next_eval = w_l_poly.evaluate(&(z_challenge * domain.group_gen));
     let b_next_eval = w_r_poly.evaluate(&(z_challenge * domain.group_gen));
     let d_next_eval = w_4_poly.evaluate(&(z_challenge * domain.group_gen));
-    let perm_eval = z_poly.evaluate(&(z_challenge * domain.group_gen));
+    let z_next_eval = z_poly.evaluate(&(z_challenge * domain.group_gen));
 
     let p_next_eval = p_poly.evaluate(&(z_challenge * domain.group_gen));
     let h_1_eval = h_1_poly.evaluate(z_challenge);
@@ -254,7 +275,7 @@ pub fn compute(
         (alpha, beta, gamma),
         (&a_eval, &b_eval, &c_eval, &d_eval),
         (&left_sigma_eval, &right_sigma_eval, &out_sigma_eval),
-        &perm_eval,
+        &z_next_eval,
         z_poly,
     );
 
@@ -281,8 +302,11 @@ pub fn compute(
                 left_sigma_eval,
                 right_sigma_eval,
                 out_sigma_eval,
+                left_sigma_next_eval,
+                right_sigma_next_eval,
+                out_sigma_next_eval,
                 lin_poly_eval,
-                perm_eval,
+                z_next_eval,
                 p_next_eval,
                 h_1_eval,
                 h_1_next_eval,

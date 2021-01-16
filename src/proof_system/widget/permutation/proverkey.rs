@@ -233,7 +233,7 @@ impl ProverKey {
         (alpha, beta, gamma): (&BlsScalar, &BlsScalar, &BlsScalar),
         (a_eval, b_eval, c_eval, d_eval): (&BlsScalar, &BlsScalar, &BlsScalar, &BlsScalar),
         (sigma_1_eval, sigma_2_eval, sigma_3_eval): (&BlsScalar, &BlsScalar, &BlsScalar),
-        z_eval: &BlsScalar,
+        z_next_eval: &BlsScalar,
         z_poly: &Polynomial,
     ) -> Polynomial {
         let a = self.compute_lineariser_identity_range_check(
@@ -244,7 +244,7 @@ impl ProverKey {
         );
         let b = self.compute_lineariser_copy_range_check(
             (&a_eval, &b_eval, &c_eval),
-            z_eval,
+            z_next_eval,
             &sigma_1_eval,
             &sigma_2_eval,
             &sigma_3_eval,
@@ -295,7 +295,7 @@ impl ProverKey {
     fn compute_lineariser_copy_range_check(
         &self,
         (a_eval, b_eval, c_eval): (&BlsScalar, &BlsScalar, &BlsScalar),
-        z_eval: &BlsScalar,
+        z_next_eval: &BlsScalar,
         sigma_1_eval: &BlsScalar,
         sigma_2_eval: &BlsScalar,
         sigma_3_eval: &BlsScalar,
@@ -317,7 +317,7 @@ impl ProverKey {
         let mut a_2 = c_eval + beta_sigma_3;
         a_2 += gamma;
 
-        let beta_z_eval = beta * z_eval;
+        let beta_z_eval = beta * z_next_eval;
 
         let mut a = a_0 * a_1 * a_2;
         a *= beta_z_eval;
@@ -331,11 +331,11 @@ impl ProverKey {
         domain: &EvaluationDomain,
         z_challenge: &BlsScalar,
         alpha_sq: &BlsScalar,
-        z_coeffs: &Polynomial,
+        z_poly: &Polynomial,
     ) -> Polynomial {
         // Evaluate l_1(z)
         let l_1_z = domain.evaluate_all_lagrange_coefficients(*z_challenge)[0];
 
-        z_coeffs * &(l_1_z * alpha_sq)
+        z_poly * &(l_1_z * alpha_sq)
     }
 }
