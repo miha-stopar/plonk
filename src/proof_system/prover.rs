@@ -362,10 +362,13 @@ impl Prover {
                 alpha,
                 beta,
                 gamma,
+                delta,
+                epsilon,
                 range_sep_challenge,
                 logic_sep_challenge,
                 fixed_base_sep_challenge,
                 var_base_sep_challenge,
+                lookup_sep_challenge
                 z_challenge,
             ),
             &w_l_poly,
@@ -374,10 +377,11 @@ impl Prover {
             &w_4_poly,
             &t_poly,
             &z_poly,
-            &p_poly,
+            &f_poly,
             &h_1_poly,
             &h_2_poly,
-            &f_poly,
+            &table_poly,
+            &p_poly,
         );
         println!("prover t_eval {:?}", &evaluations.quot_eval);
         // Add evaluations to transcript
