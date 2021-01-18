@@ -40,6 +40,8 @@ pub struct ProofEvaluations {
     pub q_l_eval: BlsScalar,
     //
     pub q_r_eval: BlsScalar,
+    //
+    pub q_lookup_eval: BlsScalar,
     // Evaluation of the left sigma polynomial at `z`
     pub left_sigma_eval: BlsScalar,
     // Evaluation of the right sigma polynomial at `z`
@@ -57,30 +59,23 @@ pub struct ProofEvaluations {
     // Evaluation of the linearisation sigma polynomial at `z`
     pub lin_poly_eval: BlsScalar,
 
-    // (Shifted) Evaluation of the permutation polynomial at `z * root of unity`
-<<<<<<< Updated upstream
+    // Evaluation of the permutation polynomial at `z * root of unity`
     pub z_next_eval: BlsScalar,
 
-    // (Shifted) evaluation of plookup permutation polynomial at `z * root of unity`
+    // Evaluation of the lookup permutation polynomial at `z * root of unity`
     pub p_next_eval: BlsScalar,
 
-    // Evaluation of lower concatenation polynomial at `z`
+    // (Shifted) Evaluation of the lower concatenated polynomial at `z`
     pub h_1_eval: BlsScalar,
 
-    // (Shifted) evaluation of lower concatenation polynomial at `z * root of unity`
+    // (Shifted) Evaluation of the lower concatenated polynomial at `z * root of unity`
     pub h_1_next_eval: BlsScalar,
 
-    // (Shifted) evaluation of lower concatenation polynomial at `z * root of unity`
+    // (Shifted) Evaluation of the upper concatenated polynomial at `z * root of unity`
     pub h_2_next_eval: BlsScalar,
 
-    // Evaluation of query polynomial at `z * root of unity`
+    // Evaluation of the permutation polynomial at `z`
     pub f_eval: BlsScalar,
-
-    // Evaluation of lookup selector polynomial at `z`
-    pub q_lookup_eval: BlsScalar,
-=======
-    pub perm_eval: BlsScalar,
->>>>>>> Stashed changes
 }
 
 impl ProofEvaluations {
@@ -164,6 +159,7 @@ impl ProofEvaluations {
             q_c_eval,
             q_l_eval,
             q_r_eval,
+            q_lookup_eval,
             left_sigma_eval,
             right_sigma_eval,
             out_sigma_eval,
@@ -171,17 +167,12 @@ impl ProofEvaluations {
             right_sigma_next_eval,
             out_sigma_next_eval,
             lin_poly_eval,
-<<<<<<< Updated upstream
             z_next_eval,
             p_next_eval,
             h_1_eval,
             h_1_next_eval,
             h_2_next_eval,
             f_eval,
-            q_lookup_eval,
-=======
-            perm_eval,
->>>>>>> Stashed changes
         };
         Ok(proof_evals)
     }
@@ -248,6 +239,7 @@ pub fn compute(
     let right_sigma_next_eval = prover_key.permutation.right_sigma.0.evaluate(&(z_challenge * domain.group_gen));
     let out_sigma_next_eval = prover_key.permutation.out_sigma.0.evaluate(&(z_challenge * domain.group_gen));
     let q_arith_eval = prover_key.arithmetic.q_arith.0.evaluate(z_challenge);
+    let q_lookup_eval = prover_key.lookup.q_lookup.0.evaluate(z_challenge);
     let q_c_eval = prover_key.logic.q_c.0.evaluate(z_challenge);
     let q_l_eval = prover_key.fixed_base.q_l.0.evaluate(z_challenge);
     let q_r_eval = prover_key.fixed_base.q_r.0.evaluate(z_challenge);
@@ -258,23 +250,11 @@ pub fn compute(
     let a_next_eval = w_l_poly.evaluate(&(z_challenge * domain.group_gen));
     let b_next_eval = w_r_poly.evaluate(&(z_challenge * domain.group_gen));
     let d_next_eval = w_4_poly.evaluate(&(z_challenge * domain.group_gen));
-<<<<<<< Updated upstream
     let z_next_eval = z_poly.evaluate(&(z_challenge * domain.group_gen));
-
     let p_next_eval = p_poly.evaluate(&(z_challenge * domain.group_gen));
-    let h_1_eval = h_1_poly.evaluate(z_challenge);
     let h_1_next_eval = h_1_poly.evaluate(&(z_challenge * domain.group_gen));
-    let h_2_next_eval = h_2_poly.evaluate(&(z_challenge * domain.group_gen));
-    let f_eval = f_poly.evaluate(z_challenge);
-    let q_lookup_eval = prover_key.lookup.q_lookup.0.evaluate(z_challenge);
-=======
-    let perm_eval = z_poly.evaluate(&(z_challenge * domain.group_gen));
-    let lookup_perm_eval = p_poly.evaluate(&(z_challenge * domain.group_gen));
-    let h_1_next_eval = h_1_poly.evaluate(&(z_challenge * domain.group_gen));
+    let h_2_next_eval = h_1_poly.evaluate(&(z_challenge * domain.group_gen));
     let t_next_eval = table_poly.evaluate(&(z_challenge * domain.group_gen));
-
-    let omega_roots = domain.elements().last().unwrap();
->>>>>>> Stashed changes
 
     let f_1 = compute_circuit_satisfiability(
         (
@@ -314,8 +294,7 @@ pub fn compute(
         &h_1_next_eval,
         &h_1_poly,
         &h_2_poly,
-        &lookup_perm_eval,
-        &omega_roots,
+        &z_next_eval,
     );
 
     let lin_poly = &f_1 + &f_2;
@@ -338,6 +317,7 @@ pub fn compute(
                 q_c_eval,
                 q_l_eval,
                 q_r_eval,
+                q_lookup_eval,
                 left_sigma_eval,
                 right_sigma_eval,
                 out_sigma_eval,
@@ -345,17 +325,12 @@ pub fn compute(
                 right_sigma_next_eval,
                 out_sigma_next_eval,
                 lin_poly_eval,
-<<<<<<< Updated upstream
                 z_next_eval,
                 p_next_eval,
                 h_1_eval,
                 h_1_next_eval,
                 h_2_next_eval,
                 f_eval,
-                q_lookup_eval,
-=======
-                perm_eval,
->>>>>>> Stashed changes
             },
             quot_eval,
         },

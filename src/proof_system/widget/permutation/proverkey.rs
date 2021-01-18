@@ -46,7 +46,6 @@ impl ProverKey {
         gamma: &BlsScalar,
         delta: &BlsScalar,
         epsilon: &BlsScalar,
-        omega_roots: &BlsScalar,
     ) -> BlsScalar {
         let a = self.compute_quotient_identity_range_check_i(
             index, w_l_i, w_r_i, w_o_i, w_4_i, z_i, alpha, beta, gamma,
@@ -63,7 +62,6 @@ impl ProverKey {
             alpha,
             delta,
             epsilon,
-            omega_roots,
         );
         let d = self.compute_lookup_quotient_copy_range_check_i(
             index,
@@ -75,7 +73,6 @@ impl ProverKey {
             alpha,
             delta,
             epsilon,
-            omega_roots,
         );
         let e = self.compute_quotient_term_check_first_la_grange_polys(
             z_i,
@@ -123,7 +120,6 @@ impl ProverKey {
         alpha: &BlsScalar,
         delta: &BlsScalar,
         epsilon: &BlsScalar,
-        omega_roots: &BlsScalar,
     ) -> BlsScalar {
         let x = self.linear_evaluations[index];
         let alpha_5 = alpha * alpha * alpha * alpha * alpha;
@@ -131,7 +127,7 @@ impl ProverKey {
         // Compute multi use fn, 1 + delta
         let one_plus_delta = BlsScalar::one() + delta;
 
-        let a_1 = x - omega_roots;
+        let a_1 = x - BlsScalar::one();
         let a_2 = epsilon + f_i;
         let a_3 = (epsilon * one_plus_delta) + t_i + (delta * t_i_next);
 
@@ -178,7 +174,6 @@ impl ProverKey {
         alpha: &BlsScalar,
         delta: &BlsScalar,
         epsilon: &BlsScalar,
-        omega_roots: &BlsScalar,
     ) -> BlsScalar {
         let alpha_5 = alpha * alpha * alpha * alpha * alpha;
 
@@ -187,7 +182,7 @@ impl ProverKey {
         let epsilon_one_plus_delta = epsilon * one_plus_delta;
 
         let x = self.linear_evaluations[index];
-        let a_1 = x - omega_roots;
+        let a_1 = x - BlsScalar::one();
         let a_2 = epsilon_one_plus_delta + h_1_i + (delta * h_1_i_next);
         let a_3 = epsilon_one_plus_delta + h_2_i + (delta * h_2_i_next);
 
@@ -230,11 +225,20 @@ impl ProverKey {
     pub(crate) fn compute_linearisation(
         &self,
         z_challenge: &BlsScalar,
-        (alpha, beta, gamma): (&BlsScalar, &BlsScalar, &BlsScalar),
+        (alpha, beta, gamma, delta, epsilon): (&BlsScalar, &BlsScalar, &BlsScalar, &BlsScalar, &BlsScalar),
         (a_eval, b_eval, c_eval, d_eval): (&BlsScalar, &BlsScalar, &BlsScalar, &BlsScalar),
         (sigma_1_eval, sigma_2_eval, sigma_3_eval): (&BlsScalar, &BlsScalar, &BlsScalar),
         z_next_eval: &BlsScalar,
         z_poly: &Polynomial,
+        p_poly: &Polynomial,
+        f_eval: &BlsScalar,
+        t_eval: &BlsScalar,
+        t_next_eval: &BlsScalar,
+        h_1_eval: &BlsScalar,
+        h_1_next_eval: &BlsScalar,
+        h_1_poly: &Polynomial,
+        h_2_poly: &Polynomial,
+        &lookup_perm_eval: &BlsScalar,
     ) -> Polynomial {
         let a = self.compute_lineariser_identity_range_check(
             (&a_eval, &b_eval, &c_eval, &d_eval),

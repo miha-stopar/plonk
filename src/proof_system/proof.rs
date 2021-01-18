@@ -424,7 +424,7 @@ impl Proof {
         let b = - b_0 * b_1 * b_2 * b_3;
 
         // - l_1(z) * alpha^2 - l_1(z) * alpha^4
-        let c = - l1_eval * (alpha_sq + alpha_sq.square());
+        let c = - l1_eval * (alpha_sq ); //+ alpha_sq.square());
 
         // (a + b*zeta + c*zeta^2 + d*zeta^3)
         let abcd_zeta = self.evaluations.a_eval +  self.evaluations.b_eval * zeta + self.evaluations.c_eval * zeta.square() + self.evaluations.d_eval * zeta * zeta.square();
@@ -452,7 +452,9 @@ impl Proof {
         let f = - ln_eval * alpha_six * (self.evaluations.h_2_next_eval + alpha);
         
         // Return quot_eval
-        (a + b + c + d + e + f) * z_h_eval.invert().unwrap()
+        (a + b + c
+            // + d + e + f
+            ) * z_h_eval.invert().unwrap()
     }
 
     fn compute_quotient_commitment(&self, z_challenge: &BlsScalar, n: usize) -> Commitment {
