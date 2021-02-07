@@ -143,7 +143,7 @@ impl Prover {
         &self,
         commit_key: &CommitKey,
         prover_key: &ProverKey,
-        lookup_table: &PreprocessedTable4Arity,
+        lookup_table: &PlookupTable4Arity,
     ) -> Result<Proof, Error> {
         let domain = EvaluationDomain::new(self.cs.circuit_size())?;
 
@@ -184,19 +184,42 @@ impl Prover {
         // Generate table compression factor
         let zeta = transcript.challenge_scalar(b"zeta");
 
+        // Compress table into vector of single elements
+        let mut compressed_t: Vec<BlsScalar> = lookup_table.0.iter().map(|arr| arr[0] + arr[1] * zeta + arr[2] * zeta * zeta + arr[3] * zeta * zeta * zeta).collect();
+
+        // Sort table so we can be sure to choose an element that is not the highest or lowest
+        compressed_t.sort();
+        let second_element = compressed_t[1];
+
+        // Pad the table to the correct size with an element that is not the highest or lowest 
+        let pad = vec![second_element; domain.size()];
+        compressed_t.extend(pad);
+
+        // Sort again to return t to sorted state
+        // There may be a better way of inserting the padding so the sort does not need to happen twice
+        compressed_t.sort();
+
+        let compressed_t_multiset = MultiSet(compressed_t);
+
+        // Compute table poly
+        let table_poly = Polynomial::from_coefficients_vec(domain.ifft(&compressed_t_multiset.0.as_slice()));
+
         // Compute table f
-        let x_i_scalar = &[&self.to_scalars(&self.cs.x_i)[..], &pad].concat();
-        let y_i_scalar = &[&self.to_scalars(&self.cs.y_i)[..], &pad].concat();
-        let z_i_scalar = &[&self.to_scalars(&self.cs.z_i)[..], &pad].concat();
-        let fourth_i_scalar = &[&self.to_scalars(&self.cs.fourth_i)[..], &pad].concat();
+        // When q_lookup[i] is zero the wire value is replaced with a dummy value
+        // Currently set as the first row of the  public table
+        // If q_lookup is one the wire values are preserved
+        let f_1_scalar = w_l_scalar.iter().zip(&self.cs.q_lookup).map(|(w, s)| w*s + (BlsScalar::one()-s) * compressed_t_multiset.0[1]).collect::<Vec<BlsScalar>>();
+        let f_2_scalar = w_r_scalar.iter().zip(&self.cs.q_lookup).map(|(w, s)| w*s).collect::<Vec<BlsScalar>>();
+        let f_3_scalar = w_o_scalar.iter().zip(&self.cs.q_lookup).map(|(w, s)| w*s).collect::<Vec<BlsScalar>>();
+        let f_4_scalar = w_4_scalar.iter().zip(&self.cs.q_lookup).map(|(w, s)| w*s).collect::<Vec<BlsScalar>>();
 
         // Compress table into vector of single elements
         let compressed_f = MultiSet::compress_four_arity(
             [
-                &MultiSet::from(x_i_scalar.as_slice()),
-                &MultiSet::from(y_i_scalar.as_slice()),
-                &MultiSet::from(z_i_scalar.as_slice()),
-                &MultiSet::from(fourth_i_scalar.as_slice()),
+                &MultiSet::from(f_1_scalar.as_slice()),
+                &MultiSet::from(f_2_scalar.as_slice()),
+                &MultiSet::from(f_3_scalar.as_slice()),
+                &MultiSet::from(f_4_scalar.as_slice())
             ],
             zeta,
         );
@@ -209,20 +232,12 @@ impl Prover {
 
         // Add f_poly commitment to transcript
         transcript.append_commitment(b"f", &f_poly_commit);
-
-        // Compress table into vector of single elements
-        let compressed_t = MultiSet::compress_four_arity(
-            [
-                &lookup_table.t_1.0,
-                &lookup_table.t_2.0,
-                &lookup_table.t_3.0,
-                &lookup_table.t_4.0,
-            ],
-            zeta,
-        );
-
-        // Compute table poly
-        let table_poly = Polynomial::from_coefficients_vec(domain.ifft(&compressed_t.0.as_slice()));
+        /*
+        println!("t_1: {:?}", lookup_table.t_1.0);
+        println!("t_2: {:?}", lookup_table.t_2.0);
+        println!("t_3: {:?}", lookup_table.t_3.0);
+        println!("t_4: {:?}", lookup_table.t_4.0);
+        */
 
         // 2. Compute permutation polynomial
         //
@@ -252,18 +267,18 @@ impl Prover {
         let z_poly_commit = commit_key.commit(&z_poly)?;
 
         // Compute s, as the sorted and concatenated version of f and t
-        let s = compressed_t.sorted_concat(&compressed_f)?;
+        let s = compressed_t_multiset.sorted_concat(&compressed_f).unwrap();
 
         // Compute first and second halves of s, as h_1 and h_2
         let (h_1, h_2) = s.halve();
-
+        println!("h1: \n{:?}\nh2: \n{:?}", h_1, h_2);
         // Compute h polys
         let h_1_poly = Polynomial::from_coefficients_vec(domain.ifft(&h_1.0.as_slice()));
         let h_2_poly = Polynomial::from_coefficients_vec(domain.ifft(&h_2.0.as_slice()));
 
         // Commit to h polys
-        let h_1_poly_commit = commit_key.commit(&h_1_poly)?;
-        let h_2_poly_commit = commit_key.commit(&h_2_poly)?;
+        let h_1_poly_commit = commit_key.commit(&h_1_poly).unwrap();
+        let h_2_poly_commit = commit_key.commit(&h_2_poly).unwrap();
 
         // Add h polynomials to transcript
         transcript.append_commitment(b"h1", &h_1_poly_commit);
@@ -274,7 +289,7 @@ impl Prover {
             Polynomial::from_coefficients_slice(&self.cs.perm.compute_lookup_permutation_poly(
                 &domain,
                 &compressed_f.0,
-                &compressed_t.0,
+                &compressed_t_multiset.0,
                 &h_1.0,
                 &h_2.0,
                 &delta,
@@ -475,8 +490,10 @@ impl Prover {
     /// also be computed
     pub fn prove(&mut self, commit_key: &CommitKey) -> Result<Proof, Error> {
         let prover_key: &ProverKey;
-        let plookup_table = PlookupTable4Arity::new();
-        let lookup_table = PreprocessedTable4Arity::preprocess(plookup_table, &commit_key, 4);
+
+        let mut plookup_table = PlookupTable4Arity::new();
+        plookup_table.add_dummy_rows();
+        //let lookup_table = PreprocessedTable4Arity::preprocess(plookup_table, &commit_key, self.circuit_size() as u32);
 
         if self.prover_key.is_none() {
             // Preprocess circuit
@@ -489,7 +506,7 @@ impl Prover {
 
         prover_key = self.prover_key.as_ref().unwrap();
 
-        let proof = self.prove_with_preprocessed(commit_key, prover_key, &lookup_table.unwrap())?;
+        let proof = self.prove_with_preprocessed(commit_key, prover_key, &plookup_table)?;
 
         // Clear witness and reset composer variables
         self.clear_witness();

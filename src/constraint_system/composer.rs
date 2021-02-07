@@ -368,7 +368,7 @@ impl StandardComposer {
         self.q_logic.push(BlsScalar::zero());
         self.q_fixed_group_add.push(BlsScalar::zero());
         self.q_variable_group_add.push(BlsScalar::zero());
-        self.q_lookup.push(BlsScalar::zero());
+        self.q_lookup.push(BlsScalar::one());
         self.public_inputs.push(BlsScalar::zero());
         let var_six = self.add_input(BlsScalar::from(6));
         let var_one = self.add_input(BlsScalar::from(1));
@@ -393,7 +393,7 @@ impl StandardComposer {
         self.q_logic.push(BlsScalar::zero());
         self.q_fixed_group_add.push(BlsScalar::zero());
         self.q_variable_group_add.push(BlsScalar::zero());
-        self.q_lookup.push(BlsScalar::zero());
+        self.q_lookup.push(BlsScalar::one());
         self.public_inputs.push(BlsScalar::zero());
         self.w_l.push(var_min_twenty);
         self.w_r.push(var_six);
