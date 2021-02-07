@@ -738,7 +738,7 @@ impl Permutation {
         }
 
         // Remove the last(n+1'th) element
-        p.remove(n);
+        //p.remove(n);
 
         assert_eq!(n, p.len());
 

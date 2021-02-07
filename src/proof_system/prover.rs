@@ -192,13 +192,13 @@ impl Prover {
         let second_element = compressed_t[1];
 
         // Pad the table to the correct size with an element that is not the highest or lowest 
-        let pad = vec![second_element; domain.size()];
+        let pad = vec![second_element; domain.size()-compressed_t.len()];
         compressed_t.extend(pad);
 
         // Sort again to return t to sorted state
         // There may be a better way of inserting the padding so the sort does not need to happen twice
         compressed_t.sort();
-
+        println!("compressed_t\n{:?}", &compressed_t);
         let compressed_t_multiset = MultiSet(compressed_t);
 
         // Compute table poly
@@ -206,7 +206,7 @@ impl Prover {
 
         // Compute table f
         // When q_lookup[i] is zero the wire value is replaced with a dummy value
-        // Currently set as the first row of the  public table
+        // Currently set as the first row of the public table
         // If q_lookup is one the wire values are preserved
         let f_1_scalar = w_l_scalar.iter().zip(&self.cs.q_lookup).map(|(w, s)| w*s + (BlsScalar::one()-s) * compressed_t_multiset.0[1]).collect::<Vec<BlsScalar>>();
         let f_2_scalar = w_r_scalar.iter().zip(&self.cs.q_lookup).map(|(w, s)| w*s).collect::<Vec<BlsScalar>>();
@@ -214,15 +214,19 @@ impl Prover {
         let f_4_scalar = w_4_scalar.iter().zip(&self.cs.q_lookup).map(|(w, s)| w*s).collect::<Vec<BlsScalar>>();
 
         // Compress table into vector of single elements
+        // Skips first element so that f.len() = t.len() - 1
         let compressed_f = MultiSet::compress_four_arity(
             [
-                &MultiSet::from(f_1_scalar.as_slice()),
-                &MultiSet::from(f_2_scalar.as_slice()),
-                &MultiSet::from(f_3_scalar.as_slice()),
-                &MultiSet::from(f_4_scalar.as_slice())
+                &MultiSet::from(&f_1_scalar[1..]),
+                &MultiSet::from(&f_2_scalar[1..]),
+                &MultiSet::from(&f_3_scalar[1..]),
+                &MultiSet::from(&f_4_scalar[1..])
             ],
             zeta,
         );
+
+        println!("q_lookup\n{:?}", self.cs.q_lookup);
+        println!("compressed_f\n{:?}", &compressed_f);
 
         // Compute query poly
         let f_poly = Polynomial::from_coefficients_vec(domain.ifft(&compressed_f.0.as_slice()));
@@ -275,7 +279,7 @@ impl Prover {
         // Compute h polys
         let h_1_poly = Polynomial::from_coefficients_vec(domain.ifft(&h_1.0.as_slice()));
         let h_2_poly = Polynomial::from_coefficients_vec(domain.ifft(&h_2.0.as_slice()));
-
+        println!("h1 poly: \n{:?}\nh2 poly: \n{:?}", h_1_poly, h_2_poly);
         // Commit to h polys
         let h_1_poly_commit = commit_key.commit(&h_1_poly).unwrap();
         let h_2_poly_commit = commit_key.commit(&h_2_poly).unwrap();
