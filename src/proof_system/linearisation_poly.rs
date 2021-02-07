@@ -40,6 +40,8 @@ pub struct ProofEvaluations {
     pub q_l_eval: BlsScalar,
     //
     pub q_r_eval: BlsScalar,
+    //
+    pub q_lookup_eval: BlsScalar,
     // Evaluation of the left sigma polynomial at `z`
     pub left_sigma_eval: BlsScalar,
     // Evaluation of the right sigma polynomial at `z`
@@ -53,6 +55,7 @@ pub struct ProofEvaluations {
     // (Shifted) Evaluation of the permutation polynomial at `z * root of unity`
     pub perm_eval: BlsScalar,
 
+<<<<<<< HEAD
     // (Shifted) evaluation of plookup permutation polynomial at `z * root of unity`
     pub p_next_eval: BlsScalar,
 
@@ -66,6 +69,21 @@ pub struct ProofEvaluations {
     pub h_2_next_eval: BlsScalar,
 
     // Evaluation of query polynomial at `z * root of unity`
+=======
+    // (Shifted) Evaluation of the lookup permutation polynomial at `z * root of unity`
+    pub lookup_perm_eval: BlsScalar,
+
+    /// Evaluations of the first half of sorted plookup poly at `z`
+    pub h_1_eval: BlsScalar,
+
+    /// (Shifted) Evaluations of the first half of sorted plookup poly at `z * root of unity`
+    pub h_1_next_eval: BlsScalar,
+
+    /// (Shifted) Evaluations of the second half of sorted plookup poly at `z * root of unity`
+    pub h_2_next_eval: BlsScalar,
+
+    /// Evaluations of the query polynomial at `z`
+>>>>>>> dusk/composer_plookup
     pub f_eval: BlsScalar,
 }
 
@@ -112,16 +130,25 @@ impl ProofEvaluations {
         let (q_c_eval, rest) = read_scalar(rest)?;
         let (q_l_eval, rest) = read_scalar(rest)?;
         let (q_r_eval, rest) = read_scalar(rest)?;
+        let (q_lookup_eval, rest) = read_scalar(rest)?;
         let (left_sigma_eval, rest) = read_scalar(rest)?;
         let (right_sigma_eval, rest) = read_scalar(rest)?;
         let (out_sigma_eval, rest) = read_scalar(rest)?;
         let (lin_poly_eval, rest) = read_scalar(rest)?;
+<<<<<<< HEAD
         let (perm_eval, rest) = read_scalar(rest)?;
 
         let (p_next_eval, rest) = read_scalar(rest)?;
         let (h_1_eval, rest) = read_scalar(rest)?;
         let (h_1_next_eval, rest) = read_scalar(rest)?;
         let (h_2_next_eval, rest) = read_scalar(rest)?;
+=======
+        let (perm_eval, _) = read_scalar(rest)?;
+        let (lookup_perm_eval, _) = read_scalar(rest)?;
+        let (h_1_eval, _) = read_scalar(rest)?;
+        let (h_1_next_eval, _) = read_scalar(rest)?;
+        let (h_2_next_eval, _) = read_scalar(rest)?;
+>>>>>>> dusk/composer_plookup
         let (f_eval, _) = read_scalar(rest)?;
 
         let proof_evals = ProofEvaluations {
@@ -136,12 +163,17 @@ impl ProofEvaluations {
             q_c_eval,
             q_l_eval,
             q_r_eval,
+            q_lookup_eval,
             left_sigma_eval,
             right_sigma_eval,
             out_sigma_eval,
             lin_poly_eval,
             perm_eval,
+<<<<<<< HEAD
             p_next_eval,
+=======
+            lookup_perm_eval,
+>>>>>>> dusk/composer_plookup
             h_1_eval,
             h_1_next_eval,
             h_2_next_eval,
@@ -166,12 +198,16 @@ pub fn compute(
         alpha,
         beta,
         gamma,
+        delta,
+        epsilon,
         range_separation_challenge,
         logic_separation_challenge,
         fixed_base_separation_challenge,
         var_base_separation_challenge,
         z_challenge,
     ): &(
+        BlsScalar,
+        BlsScalar,
         BlsScalar,
         BlsScalar,
         BlsScalar,
@@ -187,10 +223,18 @@ pub fn compute(
     w_4_poly: &Polynomial,
     t_x_poly: &Polynomial,
     z_poly: &Polynomial,
+<<<<<<< HEAD
     p_poly: &Polynomial,
     h_1_poly: &Polynomial,
     h_2_poly: &Polynomial,
     f_poly: &Polynomial,
+=======
+    f_poly: &Polynomial,
+    h_1_poly: &Polynomial,
+    h_2_poly: &Polynomial,
+    table_poly: &Polynomial,
+    p_poly: &Polynomial,
+>>>>>>> dusk/composer_plookup
 ) -> (Polynomial, Evaluations) {
     // Compute evaluations
     let quot_eval = t_x_poly.evaluate(z_challenge);
@@ -205,11 +249,19 @@ pub fn compute(
     let q_c_eval = prover_key.logic.q_c.0.evaluate(z_challenge);
     let q_l_eval = prover_key.fixed_base.q_l.0.evaluate(z_challenge);
     let q_r_eval = prover_key.fixed_base.q_r.0.evaluate(z_challenge);
+    let q_lookup_eval = prover_key.lookup.q_lookup.0.evaluate(z_challenge);
+    let f_eval = f_poly.evaluate(z_challenge);
+    let h_1_eval = h_1_poly.evaluate(z_challenge);
+    let t_eval = table_poly.evaluate(z_challenge);
 
     let a_next_eval = w_l_poly.evaluate(&(z_challenge * domain.group_gen));
     let b_next_eval = w_r_poly.evaluate(&(z_challenge * domain.group_gen));
     let d_next_eval = w_4_poly.evaluate(&(z_challenge * domain.group_gen));
     let perm_eval = z_poly.evaluate(&(z_challenge * domain.group_gen));
+    let lookup_perm_eval = p_poly.evaluate(&(z_challenge * domain.group_gen));
+    let h_1_next_eval = h_1_poly.evaluate(&(z_challenge * domain.group_gen));
+    let h_2_next_eval = h_2_poly.evaluate(&(z_challenge * domain.group_gen));
+    let t_next_eval = table_poly.evaluate(&(z_challenge * domain.group_gen));
 
     let p_next_eval = p_poly.evaluate(&(z_challenge * domain.group_gen));
     let h_1_eval = h_1_poly.evaluate(z_challenge);
@@ -232,19 +284,30 @@ pub fn compute(
         &b_next_eval,
         &d_next_eval,
         &q_arith_eval,
+        &f_eval,
         &q_c_eval,
         &q_l_eval,
         &q_r_eval,
+        &q_lookup_eval,
         prover_key,
     );
 
     let f_2 = prover_key.permutation.compute_linearisation(
         z_challenge,
-        (alpha, beta, gamma),
+        (alpha, beta, gamma, delta, epsilon),
         (&a_eval, &b_eval, &c_eval, &d_eval),
         (&left_sigma_eval, &right_sigma_eval, &out_sigma_eval),
         &perm_eval,
         z_poly,
+        p_poly,
+        &f_eval,
+        &t_eval,
+        &t_next_eval,
+        &h_1_eval,
+        &h_1_next_eval,
+        &h_1_poly,
+        &h_2_poly,
+        &lookup_perm_eval,
     );
 
     let lin_poly = &f_1 + &f_2;
@@ -267,12 +330,17 @@ pub fn compute(
                 q_c_eval,
                 q_l_eval,
                 q_r_eval,
+                q_lookup_eval,
                 left_sigma_eval,
                 right_sigma_eval,
                 out_sigma_eval,
                 lin_poly_eval,
                 perm_eval,
+<<<<<<< HEAD
                 p_next_eval,
+=======
+                lookup_perm_eval,
+>>>>>>> dusk/composer_plookup
                 h_1_eval,
                 h_1_next_eval,
                 h_2_next_eval,
@@ -299,9 +367,11 @@ fn compute_circuit_satisfiability(
     b_next_eval: &BlsScalar,
     d_next_eval: &BlsScalar,
     q_arith_eval: &BlsScalar,
+    f_eval: &BlsScalar,
     q_c_eval: &BlsScalar,
     q_l_eval: &BlsScalar,
     q_r_eval: &BlsScalar,
+    q_lookup_eval: &BlsScalar,
     prover_key: &ProverKey,
 ) -> Polynomial {
     let a =
@@ -355,10 +425,15 @@ fn compute_circuit_satisfiability(
         d_next_eval,
     );
 
+    let f = prover_key
+        .lookup
+        .compute_linearisation(q_lookup_eval, f_eval);
+
     let mut linearisation_poly = &a + &b;
     linearisation_poly += &c;
     linearisation_poly += &d;
     linearisation_poly += &e;
+    linearisation_poly += &f;
 
     linearisation_poly
 }

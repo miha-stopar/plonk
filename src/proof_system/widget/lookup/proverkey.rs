@@ -15,15 +15,13 @@ pub struct ProverKey {
 }
 
 impl ProverKey {
-    /// Compute identity check for plookup gates
+    /// Compute identity check for lookup gates
     pub(crate) fn compute_quotient_i(
         &self,
         index: usize,
-        lookup_separation_challenge: &BlsScalar,
         w_l_i: &BlsScalar,
         w_r_i: &BlsScalar,
         w_o_i: &BlsScalar,
-        w_4_i: &BlsScalar,
         compressed_f_element: &BlsScalar,
         zeta: &BlsScalar,
     ) -> BlsScalar {
@@ -33,8 +31,24 @@ impl ProverKey {
 
         let q_lookup_i = self.q_lookup.1[index];
 
-        let compressed_tuple = compress(*w_l_i, *w_r_i, *w_o_i, *w_4_i, *zeta);
+        let compressed_tuple = compress(*w_l_i, *w_r_i, *w_o_i, *zeta);
 
-        q_lookup_i * (compressed_tuple - compressed_f_element) * lookup_separation_challenge
+        q_lookup_i * (compressed_tuple - compressed_f_element) * q_lookup_i
+    }
+
+    /// Compute linearisation for lookup gates
+    pub(crate) fn compute_linearisation(
+        &self,
+        q_lookup_eval: &BlsScalar,
+        f_eval: &BlsScalar,
+    ) -> Polynomial {
+        // q_lookup(X) * f_eval * alpha^3
+        let q_lookup_poly = &self.q_lookup.0;
+
+        let a = q_lookup_poly * f_eval;
+
+        let b = &a * q_lookup_eval;
+
+        -b
     }
 }

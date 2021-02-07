@@ -74,7 +74,7 @@ pub(crate) fn compute(
     t_eval_4n.push(t_eval_4n[3]);
 
     // Compute f(x)
-    let mut f_eval = domain_4n.fft(&f_poly);
+    let f_eval = domain_4n.fft(&f_poly);
 
     // Compute 4n eval of h_1
     let mut h_1_eval_4n = domain_4n.coset_fft(&h_1_poly);
@@ -232,16 +232,9 @@ fn compute_circuit_satisfiability_equation(
                 &w4_next,
             );
 
-            let f = prover_key.lookup.compute_quotient_i(
-                i,
-                lookup_challenge,
-                &wl,
-                &wr,
-                &wo,
-                w4,
-                f1,
-                &zeta,
-            );
+            let f = prover_key
+                .lookup
+                .compute_quotient_i(i, &wl, &wr, &wo, f1, &zeta);
 
             (a + pi) + b + c + d + e + f
         })
@@ -288,8 +281,6 @@ fn compute_permutation_checks(
     let ln_poly_alpha_7 = compute_last_lagrange_poly_scaled(domain, alpha_7);
     let ln_alpha_7_evals = domain_4n.coset_fft(&ln_poly_alpha_7.coeffs);
 
-    let omega_roots = domain.elements().last().unwrap();
-
     let t: Vec<_> = (0..domain_4n.size())
         .into_par_iter()
         .map(|i| {
@@ -319,7 +310,6 @@ fn compute_permutation_checks(
                 &gamma,
                 &delta,
                 &epsilon,
-                &omega_roots,
             )
         })
         .collect();

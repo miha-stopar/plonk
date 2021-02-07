@@ -36,8 +36,6 @@ pub(crate) struct SelectorPolynomials {
     right_sigma: Polynomial,
     out_sigma: Polynomial,
     fourth_sigma: Polynomial,
-    // table_poly: Polynomial,
-    // query_poly: Polynomial,
 }
 
 impl StandardComposer {
@@ -62,7 +60,7 @@ impl StandardComposer {
         self.q_logic.extend(zeroes_scalar.iter());
         self.q_fixed_group_add.extend(zeroes_scalar.iter());
         self.q_variable_group_add.extend(zeroes_scalar.iter());
-        // self.q_lookup.extend(zeroes_scalar.iter());
+        self.q_lookup.extend(zeroes_scalar.iter());
 
         self.w_l.extend(zeroes_var.iter());
         self.w_r.extend(zeroes_var.iter());
@@ -91,7 +89,7 @@ impl StandardComposer {
             && self.q_logic.len() == k
             && self.q_fixed_group_add.len() == k
             && self.q_variable_group_add.len() == k
-            // && self.q_lookup.len() == k
+            && self.q_lookup.len() == k
             && self.w_l.len() == k
             && self.w_r.len() == k
             && self.w_o.len() == k
@@ -321,9 +319,9 @@ impl StandardComposer {
         };
 
         // Verifier Key for lookup operations
-        // let lookup_verifier_key = widget::lookup::VerifierKey {
-        //     q_lookup: q_lookup_poly_commit,
-        // };
+        let lookup_verifier_key = widget::lookup::VerifierKey {
+            q_lookup: q_lookup_poly_commit,
+        };
 
         // Verifier Key for permutation argument
         let permutation_verifier_key = widget::permutation::VerifierKey {
@@ -341,7 +339,7 @@ impl StandardComposer {
             fixed_base: ecc_verifier_key,
             variable_base: curve_addition_verifier_key,
             permutation: permutation_verifier_key,
-            // lookup: lookup_verifier_key,
+            lookup: lookup_verifier_key,
         };
 
         let selectors = SelectorPolynomials {
