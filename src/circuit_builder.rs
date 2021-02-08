@@ -195,7 +195,7 @@ where
         transcript_initialisation: &'static [u8],
         proof: &Proof,
         pub_inputs: &[PublicInput],
-        lookup_table: &PreprocessedTable4Arity,
+        lookup_table: &PlookupTable4Arity,
     ) -> Result<()> {
         use crate::proof_system::Verifier;
         let (_, vk) = pub_params.trim(self.get_trim_size())?;
@@ -320,7 +320,6 @@ mod tests {
         let (ck, _) = pub_params.trim(2 * 20).unwrap();
 
         let plookup_table = PlookupTable4Arity::new();
-        let lookup_table = PreprocessedTable4Arity::preprocess(plookup_table, &ck, 4);
 
         {
             // Generate circuit compilation params
@@ -379,7 +378,7 @@ mod tests {
             b"Test",
             &proof,
             &public_inputs2,
-            &lookup_table.unwrap(),
+            &plookup_table,
         )
     }
 }

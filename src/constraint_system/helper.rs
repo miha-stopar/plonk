@@ -74,12 +74,13 @@ pub(crate) fn gadget_tester(
     // Compute Commit and Verifier Key
     let (ck, vk) = public_parameters.trim(verifier.cs.circuit_size().next_power_of_two())?;
 
-    let plookup_table = PlookupTable4Arity::new();
-    let lookup_table = PreprocessedTable4Arity::preprocess(plookup_table, &ck, 4);
+    let mut plookup_table = PlookupTable4Arity::new();
+    plookup_table.add_dummy_rows();
 
     // Preprocess circuit
     verifier.preprocess(&ck)?;
 
     // Verify proof
-    verifier.verify(&proof, &vk, &public_inputs, &lookup_table.unwrap())
+    verifier.verify(&proof, &vk, &public_inputs, &plookup_table)
+
 }

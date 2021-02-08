@@ -184,6 +184,9 @@ impl Prover {
         // Generate table compression factor
         let zeta = transcript.challenge_scalar(b"zeta");
 
+        println!("------------------Prover Details---------------------");
+        println!("full table:\n{:?}", lookup_table.0);
+        println!("prover zeta:\n{:?}", zeta);
         // Compress table into vector of single elements
         let mut compressed_t: Vec<BlsScalar> = lookup_table.0.iter().map(|arr| arr[0] + arr[1] * zeta + arr[2] * zeta * zeta + arr[3] * zeta * zeta * zeta).collect();
 
@@ -198,7 +201,10 @@ impl Prover {
         // Sort again to return t to sorted state
         // There may be a better way of inserting the padding so the sort does not need to happen twice
         compressed_t.sort();
-        println!("compressed_t\n{:?}", &compressed_t);
+
+
+        println!("lookup table:\n{:?}", compressed_t);
+
         let compressed_t_multiset = MultiSet(compressed_t);
 
         // Compute table poly
@@ -225,9 +231,6 @@ impl Prover {
             zeta,
         );
 
-        println!("q_lookup\n{:?}", self.cs.q_lookup);
-        println!("compressed_f\n{:?}", &compressed_f);
-
         // Compute query poly
         let f_poly = Polynomial::from_coefficients_vec(domain.ifft(&compressed_f.0.as_slice()));
 
@@ -236,12 +239,6 @@ impl Prover {
 
         // Add f_poly commitment to transcript
         transcript.append_commitment(b"f", &f_poly_commit);
-        /*
-        println!("t_1: {:?}", lookup_table.t_1.0);
-        println!("t_2: {:?}", lookup_table.t_2.0);
-        println!("t_3: {:?}", lookup_table.t_3.0);
-        println!("t_4: {:?}", lookup_table.t_4.0);
-        */
 
         // 2. Compute permutation polynomial
         //
@@ -270,16 +267,25 @@ impl Prover {
         //
         let z_poly_commit = commit_key.commit(&z_poly)?;
 
+        // Add commitment to permutation polynomial to transcript
+        transcript.append_commitment(b"z", &z_poly_commit);
+
+        // 3. Compute public inputs polynomial
+        let pi_poly = Polynomial::from_coefficients_vec(domain.ifft(&self.cs.public_inputs));
+
+        // Compute evaluation challenge; `z`
+        let z_challenge = transcript.challenge_scalar(b"z_challenge");
+
         // Compute s, as the sorted and concatenated version of f and t
         let s = compressed_t_multiset.sorted_concat(&compressed_f).unwrap();
 
         // Compute first and second halves of s, as h_1 and h_2
         let (h_1, h_2) = s.halve();
-        println!("h1: \n{:?}\nh2: \n{:?}", h_1, h_2);
+
         // Compute h polys
         let h_1_poly = Polynomial::from_coefficients_vec(domain.ifft(&h_1.0.as_slice()));
         let h_2_poly = Polynomial::from_coefficients_vec(domain.ifft(&h_2.0.as_slice()));
-        println!("h1 poly: \n{:?}\nh2 poly: \n{:?}", h_1_poly, h_2_poly);
+
         // Commit to h polys
         let h_1_poly_commit = commit_key.commit(&h_1_poly).unwrap();
         let h_2_poly_commit = commit_key.commit(&h_2_poly).unwrap();
@@ -307,8 +313,6 @@ impl Prover {
         // Add permutation polynomial commitment to transcript
         transcript.append_commitment(b"p", &p_poly_commit);
 
-        // 3. Compute public inputs polynomial
-        let pi_poly = Polynomial::from_coefficients_vec(domain.ifft(&self.cs.public_inputs));
 
         // 4. Compute quotient polynomial
         //
@@ -365,8 +369,6 @@ impl Prover {
 
         // 4. Compute linearisation polynomial
         //
-        // Compute evaluation challenge; `z`
-        let z_challenge = transcript.challenge_scalar(b"z");
 
         let (lin_poly, evaluations) = linearisation_poly::compute(
             &domain,
@@ -431,7 +433,6 @@ impl Prover {
             &t_4_poly,
             &z_challenge,
         );
-
         // Compute aggregate witness to polynomials evaluated at the evaluation challenge `z`
         let aggregate_witness = commit_key.compute_aggregate_witness(
             &[
@@ -461,6 +462,11 @@ impl Prover {
             &mut transcript,
         );
         let w_zx_comm = commit_key.commit(&shifted_aggregate_witness)?;
+
+        println!("queries:\n{:?}", compressed_f.0);
+        println!("h1:\n {:?}", h_1.0);
+        println!("h2:\n {:?}", h_2.0);
+        println!("quot eval:\n{:?}", evaluations.quot_eval);
 
         // Create Proof
         Ok(Proof {
@@ -497,7 +503,6 @@ impl Prover {
 
         let mut plookup_table = PlookupTable4Arity::new();
         plookup_table.add_dummy_rows();
-        //let lookup_table = PreprocessedTable4Arity::preprocess(plookup_table, &commit_key, self.circuit_size() as u32);
 
         if self.prover_key.is_none() {
             // Preprocess circuit
