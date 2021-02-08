@@ -418,7 +418,6 @@ impl ProverKey {
         // (epsilon(1 + delta) + h_1_eval + (delta * h_1_next_eval))
         let a = epsilon * (delta + BlsScalar::one());
         let a_2 = &a + h_1_eval + (h_1_next_eval * delta);
-
         let a_n = a_1 * p_eval * a_2 * alpha_5;
         let output = h_2_poly * &a_n;
 

@@ -234,7 +234,7 @@ fn compute_circuit_satisfiability_equation(
 
             let f = prover_key
                 .lookup
-                .compute_quotient_i(i, &wl, &wr, &wo, f1, &zeta);
+                .compute_quotient_i(i, &wl, &wr, &wo, &w4, f1, &zeta);
 
             (a + pi) + b + c + d + e + f
         })

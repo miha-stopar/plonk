@@ -455,10 +455,11 @@ impl Proof {
         // l_1(z) * alpha^2
         let c = l1_eval * alpha_sq;
 
-        // q_lookup(z) * (a + b*zeta + c*zeta^2) * alpha^3
+        // q_lookup(z) * (a + b*zeta + c*zeta^2 + d*zeta^3) * alpha^3
         let d_0 = self.evaluations.a_eval
             + (self.evaluations.b_eval * zeta)
-            + (self.evaluations.c_eval * zeta_sq);
+            + (self.evaluations.c_eval * zeta_sq)
+            + (self.evaluations.d_eval * zeta_sq*zeta);
         let d = self.evaluations.q_lookup_eval * d_0 * alpha_cu;
 
         // l_1(z) * alpha^4
@@ -468,12 +469,12 @@ impl Proof {
         let f_0 = z_challenge - BlsScalar::one();
         let f_1 = epsilon_one_plus_delta
             + self.evaluations.h_1_eval
-            + (delta * self.evaluations.h_1_eval);
+            + (delta * self.evaluations.h_1_next_eval);
         let f_2 = epsilon_one_plus_delta + (delta * self.evaluations.h_2_next_eval);
         let f = f_0 * self.evaluations.lookup_perm_eval * f_1 * f_2 * alpha_5;
 
-        // l_n(z) * h_2_next_eval * alpha_5
-        let g = ln_eval * self.evaluations.h_2_next_eval * alpha_5;
+        // l_n(z) * h_2_next_eval * alpha_6
+        let g = ln_eval * self.evaluations.h_2_next_eval * alpha_6;
 
         // l_n(z) * alpha^7
         let h = ln_eval * alpha_7;
