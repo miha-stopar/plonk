@@ -44,7 +44,7 @@ impl Prover {
         }
         let pk = self
             .cs
-            .preprocess_prover(commit_key, &mut self.preprocessed_transcript)?;
+            .preprocess_prover(commit_key, &mut self.preprocessed_transcript).unwrap();
         self.prover_key = Some(pk);
         Ok(())
     }
@@ -113,7 +113,7 @@ impl Prover {
         commit_key: &CommitKey,
         prover_key: &ProverKey,
     ) -> Result<Proof, Error> {
-        let domain = EvaluationDomain::new(self.cs.circuit_size())?;
+        let domain = EvaluationDomain::new(self.cs.circuit_size()).unwrap();
 
         // Since the caller is passing a pre-processed circuit
         // We assume that the Transcript has been seeded with the preprocessed
@@ -519,7 +519,7 @@ impl PlookupProver {
         let second_element = compressed_t[1];
 
         // Pad the table to the correct size with an element that is not the highest or lowest
-        let pad = vec![second_element; domain.size() - compressed_t.len()];
+        let pad = vec![&second_element; domain.size() - compressed_t.len()];
         compressed_t.extend(pad);
 
         // Sort again to return t to sorted state
@@ -534,12 +534,12 @@ impl PlookupProver {
 
         // Compute table f
         // When q_lookup[i] is zero the wire value is replaced with a dummy value
-        // Currently set as the first row of the public table
+        // Currently set as the second row of the public table
         // If q_lookup is one the wire values are preserved
         let f_1_scalar = w_l_scalar
             .iter()
             .zip(&self.cs.q_lookup)
-            .map(|(w, s)| w * s + (BlsScalar::one() - s) * compressed_t_multiset.0[1])
+            .map(|(w, s)| w * s + (BlsScalar::one() - s) * second_element)
             .collect::<Vec<BlsScalar>>();
         let f_2_scalar = w_r_scalar
             .iter()
@@ -680,7 +680,7 @@ impl PlookupProver {
         let var_base_sep_challenge =
             transcript.challenge_scalar(b"variable base separation challenge");
         let lookup_sep_challenge = transcript.challenge_scalar(b"lookup challenge");
-
+        println!("prover lookup sep: {:?}", lookup_sep_challenge);
         let t_poly = lookup_quotient::compute(
             &domain,
             &prover_key,
@@ -779,7 +779,7 @@ impl PlookupProver {
         transcript.append_scalar(b"h_2_next_eval", &evaluations.proof.h_2_next_eval);
         transcript.append_scalar(b"t_eval", &evaluations.quot_eval);
         transcript.append_scalar(b"r_eval", &evaluations.proof.lin_poly_eval);
-
+        println!("prover quot eval: {:?}", evaluations.quot_eval);
         // 5. Compute Openings using KZG10
         //
         // We merge the quotient polynomial using the `z_challenge` so the SRS is linear in the circuit size `n`
@@ -869,6 +869,31 @@ impl PlookupProver {
         prover_key = self.prover_key.as_ref().unwrap();
 
         let proof = self.prove_with_preprocessed(commit_key, prover_key, &plookup_table)?;
+
+        // Clear witness and reset composer variables
+        self.clear_witness();
+
+        Ok(proof)
+    }
+
+        /// Proves a circuit is satisfied, then clears the witness variables
+    /// If the circuit is not pre-processed, then the preprocessed circuit will
+    /// also be computed
+    pub fn prove_with_table(&mut self, commit_key: &CommitKey, lookup_table: &PlookupTable4Arity) -> Result<PlookupProof, Error> {
+        let prover_key: &PlookupProverKey;
+
+        if self.prover_key.is_none() {
+            // Preprocess circuit
+            let prover_key = self
+                .cs
+                .preprocess_prover(commit_key, &mut self.preprocessed_transcript)?;
+            // Store preprocessed circuit and transcript in the Prover
+            self.prover_key = Some(prover_key);
+        }
+
+        prover_key = self.prover_key.as_ref().unwrap();
+
+        let proof = self.prove_with_preprocessed(commit_key, prover_key, &lookup_table)?;
 
         // Clear witness and reset composer variables
         self.clear_witness();

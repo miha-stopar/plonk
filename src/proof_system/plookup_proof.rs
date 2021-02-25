@@ -150,7 +150,7 @@ impl PlookupProof {
         lookup_table: &PlookupTable4Arity,
         pub_inputs: &[BlsScalar],
     ) -> Result<(), Error> {
-        let domain = EvaluationDomain::new(verifier_key.n)?;
+        let domain = EvaluationDomain::new(verifier_key.n).unwrap();
         // Subgroup checks are done when the proof is deserialised.
 
         // In order for the Verifier and Prover to have the same view in the non-interactive setting
@@ -201,7 +201,7 @@ impl PlookupProof {
         let var_base_sep_challenge =
             transcript.challenge_scalar(b"variable base separation challenge");
         let lookup_sep_challenge = transcript.challenge_scalar(b"lookup challenge");
-
+        println!("verifier lookup sep: {:?}", lookup_sep_challenge);
         // Add commitment to quotient polynomial to transcript
         transcript.append_commitment(b"t_1", &self.t_1_comm);
         transcript.append_commitment(b"t_2", &self.t_2_comm);
@@ -227,7 +227,7 @@ impl PlookupProof {
         // Sort table so we can be sure to choose an element that is not the highest or lowest
         compressed_t.sort();
         let second_element = compressed_t[1];
-
+        println!("domain size {:?}", domain.size());
         // Pad the table to the correct size with an element that is not the highest or lowest
         let pad = vec![second_element; domain.size() - compressed_t.len()];
         compressed_t.extend(pad);
@@ -289,6 +289,8 @@ impl PlookupProof {
         transcript.append_scalar(b"h_2_next_eval", &self.evaluations.h_2_next_eval);
         transcript.append_scalar(b"t_eval", &t_eval);
         transcript.append_scalar(b"r_eval", &self.evaluations.lin_poly_eval);
+
+        println!("verifier quot eval: {:?}", t_eval);
 
         // Compute linearisation commitment
         let r_comm = self.compute_linearisation_commitment(

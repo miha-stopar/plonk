@@ -281,6 +281,34 @@ impl PlookupComposer {
         );
     }
 
+    pub fn add_one_dummy_constraint(&mut self) {
+        // Add a dummy constraint so that we do not have zero polynomials
+        self.q_m.push(BlsScalar::from(1));
+        self.q_l.push(BlsScalar::from(2));
+        self.q_r.push(BlsScalar::from(3));
+        self.q_o.push(BlsScalar::from(4));
+        self.q_c.push(BlsScalar::from(4));
+        self.q_4.push(BlsScalar::one());
+        self.q_arith.push(BlsScalar::one());
+        self.q_range.push(BlsScalar::zero());
+        self.q_logic.push(BlsScalar::zero());
+        self.q_fixed_group_add.push(BlsScalar::zero());
+        self.q_variable_group_add.push(BlsScalar::zero());
+        self.q_lookup.push(BlsScalar::one());
+        self.public_inputs.push(BlsScalar::zero());
+        let var_six = self.add_input(BlsScalar::from(6));
+        let var_one = self.add_input(BlsScalar::from(1));
+        let var_seven = self.add_input(BlsScalar::from(7));
+        let var_min_twenty = self.add_input(-BlsScalar::from(20));
+        self.w_l.push(var_six);
+        self.w_r.push(var_seven);
+        self.w_o.push(var_min_twenty);
+        self.w_4.push(var_one);
+        self.perm
+            .add_variables_to_map(var_six, var_seven, var_min_twenty, var_one, self.n);
+        self.n += 1;
+    }
+
     /// This function is used to add a blinding factor to the witness polynomials
     /// XXX: Split this into two separate functions and document
     /// XXX: We could add another section to add random witness variables, with selector polynomials all zero
@@ -354,10 +382,10 @@ impl PlookupComposer {
             None => self.zero_var,
         };
 
-        self.w_l.push(self.zero_var);
-        self.w_r.push(self.zero_var);
-        self.w_o.push(self.zero_var);
-        self.w_4.push(self.zero_var);
+        self.w_l.push(a);
+        self.w_r.push(b);
+        self.w_o.push(c);
+        self.w_4.push(d);
 
         // Add selector vectors
         self.q_l.push(BlsScalar::zero());
@@ -481,6 +509,7 @@ mod tests {
 
         let proof = prover.prove(&ck).unwrap();
 
+        // Create the public table with dummy rows matching dummy gates
         let mut plookup_table = PlookupTable4Arity::new();
         plookup_table.add_dummy_rows();
 
@@ -500,5 +529,163 @@ mod tests {
         assert!(verifier
             .verify(&proof, &vk, &public_inputs, &plookup_table)
             .is_ok());
+    }
+    #[test]
+    // XXX: Move this to integration tests
+    fn test_cube_table() {
+
+        let mut cube_table = PlookupTable4Arity::new();   
+        cube_table.add_dummy_rows();   
+        for i in 0..(32-cube_table.0.len() as u64) {
+            cube_table.0.push([
+                BlsScalar::from(i),
+                BlsScalar::from(i*i*i),
+                BlsScalar::zero(),
+                BlsScalar::zero(),
+            ]);
+        }
+
+        let res = gadget_plookup_tester(
+            |composer| {
+                let zero = composer.add_input(BlsScalar::zero());
+
+                let one = composer.add_input(BlsScalar::one());
+                let one_cubed = composer.add_input(BlsScalar::one());
+
+                let nine = composer.add_input(BlsScalar::from(9));
+                let nine_cubed = composer.add_input(BlsScalar::from(9*9*9));
+
+                let ten = composer.add_input(BlsScalar::from(10));
+                let ten_cubed = composer.add_input(BlsScalar::from(10*10*10));
+
+                let twelve = composer.add_input(BlsScalar::from(12));
+                let twelve_cubed = composer.add_input(BlsScalar::from(12*12*12));
+
+                // Add lookup query gates
+                composer.plookup_gate(one, one_cubed, zero, Some(zero), BlsScalar::zero());
+                composer.plookup_gate(nine, nine_cubed, zero, Some(zero), BlsScalar::zero());
+                composer.plookup_gate(ten, ten_cubed, zero, Some(zero), BlsScalar::zero());
+                composer.plookup_gate(twelve, twelve_cubed, zero, Some(zero), BlsScalar::zero());
+
+                // Checks that 1^3 + 12^3 = 1729 (public input)
+                composer.poly_gate(
+                    one_cubed,
+                    twelve_cubed,
+                    zero,
+                    BlsScalar::zero(),
+                    BlsScalar::one(),
+                    BlsScalar::one(),
+                    BlsScalar::zero(),
+                    BlsScalar::zero(),
+                    -BlsScalar::from(1729),
+                );
+
+                // Checks that 9^3 + 10^3 = 1729 (public input)
+                composer.poly_gate(
+                    nine_cubed,
+                    ten_cubed,
+                    zero,
+                    BlsScalar::zero(),
+                    BlsScalar::one(),
+                    BlsScalar::one(),
+                    BlsScalar::zero(),
+                    BlsScalar::zero(),
+                    -BlsScalar::from(1729),
+                );
+
+                // Now we must show that the two ways of writing 1729
+                // as a sum of two cubes are indeed different. We can
+                // show that set {a, b} =/= {c, d} by showing that 
+                // a =/= c, a =/= d, b =/= c, and b =/= d. We can show
+                // an individual inequality a =/= c by asking the prover
+                // to provide an inverse z to a - c. Then a constraint
+                // shows that z * (a - c) = 1. If a = c it will be
+                // impossible for the prover to provide such an inverse.
+
+                let a_minus_c_inverse = composer.add_input((BlsScalar::from(1)-BlsScalar::from(9)).invert().unwrap());
+                let a_minus_d_inverse = composer.add_input((BlsScalar::from(1)-BlsScalar::from(10)).invert().unwrap());
+                let b_minus_c_inverse = composer.add_input((BlsScalar::from(12)-BlsScalar::from(9)).invert().unwrap());
+                let b_minus_d_inverse = composer.add_input((BlsScalar::from(12)-BlsScalar::from(10)).invert().unwrap());
+
+                let a_minus_c = composer.add(
+                    (BlsScalar::one(), one),
+                    (-BlsScalar::one(), nine),
+                    BlsScalar::zero(),
+                    BlsScalar::zero(),
+                );
+
+
+                let a_minus_d = composer.add(
+                    (BlsScalar::one(), one),
+                    (-BlsScalar::one(), ten),
+                    BlsScalar::zero(),
+                    BlsScalar::zero(),
+                );
+
+                let b_minus_c = composer.add(
+                    (BlsScalar::one(), twelve),
+                    (-BlsScalar::one(), nine),
+                    BlsScalar::zero(),
+                    BlsScalar::zero(),
+                );
+
+                let b_minus_d = composer.add(
+                    (BlsScalar::one(), twelve),
+                    (-BlsScalar::one(), ten),
+                    BlsScalar::zero(),
+                    BlsScalar::zero(),
+                );
+
+                composer.mul_gate(
+                    a_minus_c,
+                    a_minus_c_inverse,
+                    one,
+                    BlsScalar::one(),
+                    -BlsScalar::one(),
+                    BlsScalar::zero(),
+                    BlsScalar::zero(),
+                );
+
+                println!("a_minus_c_inverse\n{:?}", a_minus_c_inverse);
+
+                println!("b_minus_c_inverse\n{:?}", b_minus_c_inverse);
+                println!("composer\n{:?}", composer);
+/*
+                composer.mul_gate(
+                    a_minus_d,
+                    a_minus_d_inverse,
+                    one,
+                    BlsScalar::one(),
+                    -BlsScalar::one(),
+                    BlsScalar::zero(),
+                    BlsScalar::zero(),
+                );
+
+                composer.mul_gate(
+                    b_minus_c,
+                    b_minus_c_inverse,
+                    one,
+                    BlsScalar::one(),
+                    -BlsScalar::one(),
+                    BlsScalar::zero(),
+                    BlsScalar::zero(),
+                );
+
+                composer.mul_gate(
+                    b_minus_d,
+                    b_minus_d_inverse,
+                    one,
+                    BlsScalar::one(),
+                    -BlsScalar::one(),
+                    BlsScalar::zero(),
+                    BlsScalar::zero(),
+                );
+*/
+            },
+            32,
+            cube_table,
+        );
+
+        assert!(res.is_ok());
     }
 }
