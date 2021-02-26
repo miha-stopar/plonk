@@ -281,8 +281,8 @@ impl PlookupComposer {
         );
     }
 
+    /// Adds a single dummy constraint
     pub fn add_one_dummy_constraint(&mut self) {
-        // Add a dummy constraint so that we do not have zero polynomials
         self.q_m.push(BlsScalar::from(1));
         self.q_l.push(BlsScalar::from(2));
         self.q_r.push(BlsScalar::from(3));
@@ -530,16 +530,16 @@ mod tests {
             .verify(&proof, &vk, &public_inputs, &plookup_table)
             .is_ok());
     }
+
     #[test]
     // XXX: Move this to integration tests
     fn test_cube_table() {
-
-        let mut cube_table = PlookupTable4Arity::new();   
-        cube_table.add_dummy_rows();   
-        for i in 0..(32-cube_table.0.len() as u64) {
+        let mut cube_table = PlookupTable4Arity::new();
+        cube_table.add_dummy_rows();
+        for i in 0..(32 - cube_table.0.len() as u64) {
             cube_table.0.push([
                 BlsScalar::from(i),
-                BlsScalar::from(i*i*i),
+                BlsScalar::from(i * i * i),
                 BlsScalar::zero(),
                 BlsScalar::zero(),
             ]);
@@ -553,19 +553,28 @@ mod tests {
                 let one_cubed = composer.add_input(BlsScalar::one());
 
                 let nine = composer.add_input(BlsScalar::from(9));
-                let nine_cubed = composer.add_input(BlsScalar::from(9*9*9));
+                let nine_cubed = composer.add_input(BlsScalar::from(9 * 9 * 9));
 
                 let ten = composer.add_input(BlsScalar::from(10));
-                let ten_cubed = composer.add_input(BlsScalar::from(10*10*10));
+                let ten_cubed = composer.add_input(BlsScalar::from(10 * 10 * 10));
 
                 let twelve = composer.add_input(BlsScalar::from(12));
-                let twelve_cubed = composer.add_input(BlsScalar::from(12*12*12));
+                let twelve_cubed = composer.add_input(BlsScalar::from(12 * 12 * 12));
 
                 // Add lookup query gates
                 composer.plookup_gate(one, one_cubed, zero, Some(zero), BlsScalar::zero());
                 composer.plookup_gate(nine, nine_cubed, zero, Some(zero), BlsScalar::zero());
                 composer.plookup_gate(ten, ten_cubed, zero, Some(zero), BlsScalar::zero());
                 composer.plookup_gate(twelve, twelve_cubed, zero, Some(zero), BlsScalar::zero());
+
+                // Sanity check that the inputs are of an expected size.
+                // The cube root of 1729 is just over 12, so all inputs
+                // ought to be less than 4 bits.
+
+                composer.range_gate(one, 4);
+                composer.range_gate(twelve, 4);
+                composer.range_gate(nine, 4);
+                composer.range_gate(ten, 4);
 
                 // Checks that 1^3 + 12^3 = 1729 (public input)
                 composer.poly_gate(
@@ -595,17 +604,27 @@ mod tests {
 
                 // Now we must show that the two ways of writing 1729
                 // as a sum of two cubes are indeed different. We can
-                // show that set {a, b} =/= {c, d} by showing that 
+                // show that set {a, b} =/= {c, d} by showing that
                 // a =/= c, a =/= d, b =/= c, and b =/= d. We can show
                 // an individual inequality a =/= c by asking the prover
                 // to provide an inverse z to a - c. Then a constraint
                 // shows that z * (a - c) = 1. If a = c it will be
                 // impossible for the prover to provide such an inverse.
 
-                let a_minus_c_inverse = composer.add_input((BlsScalar::from(1)-BlsScalar::from(9)).invert().unwrap());
-                let a_minus_d_inverse = composer.add_input((BlsScalar::from(1)-BlsScalar::from(10)).invert().unwrap());
-                let b_minus_c_inverse = composer.add_input((BlsScalar::from(12)-BlsScalar::from(9)).invert().unwrap());
-                let b_minus_d_inverse = composer.add_input((BlsScalar::from(12)-BlsScalar::from(10)).invert().unwrap());
+                let a_minus_c_inverse =
+                    composer.add_input((BlsScalar::from(1) - BlsScalar::from(9)).invert().unwrap());
+
+                let a_minus_d_inverse = composer
+                    .add_input((BlsScalar::from(1) - BlsScalar::from(10)).invert().unwrap());
+
+                let b_minus_c_inverse = composer
+                    .add_input((BlsScalar::from(12) - BlsScalar::from(9)).invert().unwrap());
+
+                let b_minus_d_inverse = composer.add_input(
+                    (BlsScalar::from(12) - BlsScalar::from(10))
+                        .invert()
+                        .unwrap(),
+                );
 
                 let a_minus_c = composer.add(
                     (BlsScalar::one(), one),
@@ -613,7 +632,6 @@ mod tests {
                     BlsScalar::zero(),
                     BlsScalar::zero(),
                 );
-
 
                 let a_minus_d = composer.add(
                     (BlsScalar::one(), one),
@@ -636,55 +654,184 @@ mod tests {
                     BlsScalar::zero(),
                 );
 
+                // Each multiplication gate constrains the output to be constant 1
                 composer.mul_gate(
                     a_minus_c,
                     a_minus_c_inverse,
-                    one,
+                    zero,
                     BlsScalar::one(),
-                    -BlsScalar::one(),
                     BlsScalar::zero(),
+                    -BlsScalar::one(),
                     BlsScalar::zero(),
                 );
 
-                println!("a_minus_c_inverse\n{:?}", a_minus_c_inverse);
-
-                println!("b_minus_c_inverse\n{:?}", b_minus_c_inverse);
-                println!("composer\n{:?}", composer);
-/*
                 composer.mul_gate(
                     a_minus_d,
                     a_minus_d_inverse,
-                    one,
+                    zero,
                     BlsScalar::one(),
-                    -BlsScalar::one(),
                     BlsScalar::zero(),
+                    -BlsScalar::one(),
                     BlsScalar::zero(),
                 );
 
                 composer.mul_gate(
                     b_minus_c,
                     b_minus_c_inverse,
-                    one,
+                    zero,
                     BlsScalar::one(),
-                    -BlsScalar::one(),
                     BlsScalar::zero(),
+                    -BlsScalar::one(),
                     BlsScalar::zero(),
                 );
 
                 composer.mul_gate(
                     b_minus_d,
                     b_minus_d_inverse,
-                    one,
+                    zero,
                     BlsScalar::one(),
+                    BlsScalar::zero(),
                     -BlsScalar::one(),
                     BlsScalar::zero(),
-                    BlsScalar::zero(),
                 );
-*/
             },
             32,
             cube_table,
         );
+
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    // XXX: Move this to integration tests
+    fn test_plookup_all_gates() {
+        use rand::rngs::ThreadRng;
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+
+        let mut random_table = PlookupTable4Arity::new();
+        random_table.add_dummy_rows();
+
+        let table_length = rng.gen_range(10, 100);
+        for i in 0..table_length {
+            random_table.0.push([
+                BlsScalar::random(&mut rng),
+                BlsScalar::random(&mut rng),
+                BlsScalar::random(&mut rng),
+                BlsScalar::random(&mut rng),
+            ]);
+        }
+
+        fn all_gates_circuit(
+            table: &PlookupTable4Arity,
+            composer: &mut PlookupComposer,
+            rng: &mut ThreadRng,
+        ) {
+            let random_row = table.0[rng.gen_range(0, table.0.len()) as usize];
+            let (r1, r2, r3, r4) = (random_row[0], random_row[1], random_row[2], random_row[3]);
+            let r1_var = composer.add_input(r1);
+            let r2_var = composer.add_input(r2);
+            let r3_var = composer.add_input(r3);
+            let r4_var = composer.add_input(r4);
+
+            // add a lookup query gate from the table
+            composer.plookup_gate(r1_var, r2_var, r3_var, Some(r4_var), BlsScalar::zero());
+
+            // add some arithmetic gates using the random values
+            let r1_r2_sum = composer.add(
+                (BlsScalar::one(), r1_var),
+                (BlsScalar::one(), r2_var),
+                BlsScalar::zero(),
+                BlsScalar::zero(),
+            );
+
+            let r3_r4_prod = composer.mul(
+                BlsScalar::one(),
+                r3_var,
+                r4_var,
+                BlsScalar::zero(),
+                BlsScalar::zero(),
+            );
+
+            // test logic gates
+            let r1_xor_r2 = composer.xor_gate(r1_var, r2_var, 8);
+            let r1_and_zero = composer.and_gate(r1_var, composer.zero_var, 8);
+
+            // test a range gate
+            composer.range_gate(r1_xor_r2, 8);
+
+            // test a boolean gate
+            composer.boolean_gate(r1_and_zero);
+        }
+
+        // Common View
+        let public_parameters = PublicParameters::setup(128, &mut rand::thread_rng()).unwrap();
+
+        // Provers View
+        let (proof, public_inputs) = {
+            // Create a prover struct
+            let mut prover = PlookupProver::new(b"all_gates");
+
+            // Additionally key the transcript
+            prover.key_transcript(b"key", b"additional seed information");
+
+            all_gates_circuit(&random_table, prover.mut_cs(), &mut rng);
+
+            // Commit Key
+            let (ck, _) = public_parameters
+                .trim(2 * prover.cs.circuit_size().next_power_of_two())
+                .unwrap();
+
+            // This ought to be added to shared preprocessing
+            if prover.mut_cs().w_l.len() < random_table.0.len() {
+                for i in 0..(random_table.0.len() - prover.mut_cs().w_l.len()) {
+                    prover.mut_cs().add_one_dummy_constraint();
+                }
+            }
+
+            // Preprocess circuit
+            prover.preprocess(&ck).unwrap();
+
+            // Once the prove method is called, the public inputs are cleared
+            // So pre-fetch these before calling Prove
+            let public_inputs = prover.cs.public_inputs.clone();
+
+            // Compute Proof
+            (
+                prover.prove_with_table(&ck, &random_table).unwrap(),
+                public_inputs,
+            )
+        };
+
+        // Verifiers view
+        //
+        // Create a Verifier object
+        let mut verifier = PlookupVerifier::new(b"all_gates");
+
+        // Additionally key the transcript
+        verifier.key_transcript(b"key", b"additional seed information");
+
+        // Add gadgets
+        all_gates_circuit(&random_table, verifier.mut_cs(), &mut rng);
+
+        // This ought to be added to shared preprocessing
+        if verifier.mut_cs().w_l.len() < random_table.0.len() {
+            for i in 0..(random_table.0.len() - verifier.mut_cs().w_l.len()) {
+                verifier.mut_cs().add_one_dummy_constraint();
+            }
+        }
+
+        // Compute Commit and Verifier Key
+        let (ck, vk) = public_parameters
+            .trim(verifier.cs.circuit_size().next_power_of_two())
+            .unwrap();
+
+        // Preprocess circuit
+        verifier.preprocess(&ck).unwrap();
+
+        // Verify proof
+        let res = verifier.verify(&proof, &vk, &public_inputs, &random_table);
 
         assert!(res.is_ok());
     }

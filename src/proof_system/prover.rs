@@ -44,7 +44,8 @@ impl Prover {
         }
         let pk = self
             .cs
-            .preprocess_prover(commit_key, &mut self.preprocessed_transcript).unwrap();
+            .preprocess_prover(commit_key, &mut self.preprocessed_transcript)
+            .unwrap();
         self.prover_key = Some(pk);
         Ok(())
     }
@@ -468,7 +469,7 @@ impl PlookupProver {
         prover_key: &PlookupProverKey,
         lookup_table: &PlookupTable4Arity,
     ) -> Result<PlookupProof, Error> {
-        let domain = EvaluationDomain::new(self.cs.circuit_size())?;
+        let domain = EvaluationDomain::new(self.cs.circuit_size()).unwrap();
 
         // Since the caller is passing a pre-processed circuit
         // We assume that the Transcript has been seeded with the preprocessed
@@ -493,10 +494,10 @@ impl PlookupProver {
         let w_4_poly = Polynomial::from_coefficients_vec(domain.ifft(w_4_scalar));
 
         // Commit to witness polynomials
-        let w_l_poly_commit = commit_key.commit(&w_l_poly)?;
-        let w_r_poly_commit = commit_key.commit(&w_r_poly)?;
-        let w_o_poly_commit = commit_key.commit(&w_o_poly)?;
-        let w_4_poly_commit = commit_key.commit(&w_4_poly)?;
+        let w_l_poly_commit = commit_key.commit(&w_l_poly).unwrap();
+        let w_r_poly_commit = commit_key.commit(&w_r_poly).unwrap();
+        let w_o_poly_commit = commit_key.commit(&w_o_poly).unwrap();
+        let w_4_poly_commit = commit_key.commit(&w_4_poly).unwrap();
 
         // Add witness polynomial commitments to transcript
         transcript.append_commitment(b"w_l", &w_l_poly_commit);
@@ -589,7 +590,7 @@ impl PlookupProver {
             Polynomial::from_coefficients_vec(domain.ifft(&compressed_f_short.0.as_slice()));
 
         // Commit to query polynomial
-        let f_poly_short_commit = commit_key.commit(&f_poly_short)?;
+        let f_poly_short_commit = commit_key.commit(&f_poly_short).unwrap();
 
         // Add f_poly commitment to transcript
         transcript.append_commitment(b"f", &f_poly_short_commit);
@@ -619,7 +620,7 @@ impl PlookupProver {
 
         // Commit to permutation polynomial
         //
-        let z_poly_commit = commit_key.commit(&z_poly)?;
+        let z_poly_commit = commit_key.commit(&z_poly).unwrap();
 
         // Add commitment to permutation polynomial to transcript
         transcript.append_commitment(b"z", &z_poly_commit);
@@ -664,7 +665,7 @@ impl PlookupProver {
 
         // Commit to permutation polynomial
         //
-        let p_poly_commit = commit_key.commit(&p_poly)?;
+        let p_poly_commit = commit_key.commit(&p_poly).unwrap();
 
         // Add permutation polynomial commitment to transcript
         transcript.append_commitment(b"p", &p_poly_commit);
@@ -680,7 +681,7 @@ impl PlookupProver {
         let var_base_sep_challenge =
             transcript.challenge_scalar(b"variable base separation challenge");
         let lookup_sep_challenge = transcript.challenge_scalar(b"lookup challenge");
-        println!("prover lookup sep: {:?}", lookup_sep_challenge);
+
         let t_poly = lookup_quotient::compute(
             &domain,
             &prover_key,
@@ -706,16 +707,17 @@ impl PlookupProver {
                 var_base_sep_challenge,
                 lookup_sep_challenge,
             ),
-        )?;
+        )
+        .unwrap();
 
         // Split quotient polynomial into 4 degree `n` polynomials
         let (t_1_poly, t_2_poly, t_3_poly, t_4_poly) = split_tx_poly(domain.size(), &t_poly);
 
         // Commit to splitted quotient polynomial
-        let t_1_commit = commit_key.commit(&t_1_poly)?;
-        let t_2_commit = commit_key.commit(&t_2_poly)?;
-        let t_3_commit = commit_key.commit(&t_3_poly)?;
-        let t_4_commit = commit_key.commit(&t_4_poly)?;
+        let t_1_commit = commit_key.commit(&t_1_poly).unwrap();
+        let t_2_commit = commit_key.commit(&t_2_poly).unwrap();
+        let t_3_commit = commit_key.commit(&t_3_poly).unwrap();
+        let t_4_commit = commit_key.commit(&t_4_poly).unwrap();
 
         // Add quotient polynomial commitments to transcript
         transcript.append_commitment(b"t_1", &t_1_commit);
@@ -779,7 +781,7 @@ impl PlookupProver {
         transcript.append_scalar(b"h_2_next_eval", &evaluations.proof.h_2_next_eval);
         transcript.append_scalar(b"t_eval", &evaluations.quot_eval);
         transcript.append_scalar(b"r_eval", &evaluations.proof.lin_poly_eval);
-        println!("prover quot eval: {:?}", evaluations.quot_eval);
+
         // 5. Compute Openings using KZG10
         //
         // We merge the quotient polynomial using the `z_challenge` so the SRS is linear in the circuit size `n`
@@ -809,7 +811,7 @@ impl PlookupProver {
             &z_challenge,
             &mut transcript,
         );
-        let w_z_comm = commit_key.commit(&aggregate_witness)?;
+        let w_z_comm = commit_key.commit(&aggregate_witness).unwrap();
 
         // Compute aggregate witness to polynomials evaluated at the shifted evaluation challenge
         let shifted_aggregate_witness = commit_key.compute_aggregate_witness(
@@ -819,7 +821,7 @@ impl PlookupProver {
             &(z_challenge * domain.group_gen),
             &mut transcript,
         );
-        let w_zx_comm = commit_key.commit(&shifted_aggregate_witness)?;
+        let w_zx_comm = commit_key.commit(&shifted_aggregate_witness).unwrap();
 
         // Create Proof
         Ok(PlookupProof {
@@ -861,7 +863,8 @@ impl PlookupProver {
             // Preprocess circuit
             let prover_key = self
                 .cs
-                .preprocess_prover(commit_key, &mut self.preprocessed_transcript)?;
+                .preprocess_prover(commit_key, &mut self.preprocessed_transcript)
+                .unwrap();
             // Store preprocessed circuit and transcript in the Prover
             self.prover_key = Some(prover_key);
         }
@@ -876,10 +879,14 @@ impl PlookupProver {
         Ok(proof)
     }
 
-        /// Proves a circuit is satisfied, then clears the witness variables
+    /// Proves a circuit is satisfied, then clears the witness variables
     /// If the circuit is not pre-processed, then the preprocessed circuit will
     /// also be computed
-    pub fn prove_with_table(&mut self, commit_key: &CommitKey, lookup_table: &PlookupTable4Arity) -> Result<PlookupProof, Error> {
+    pub fn prove_with_table(
+        &mut self,
+        commit_key: &CommitKey,
+        lookup_table: &PlookupTable4Arity,
+    ) -> Result<PlookupProof, Error> {
         let prover_key: &PlookupProverKey;
 
         if self.prover_key.is_none() {

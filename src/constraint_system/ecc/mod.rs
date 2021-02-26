@@ -9,7 +9,7 @@ pub mod curve_addition;
 /// Gates related to scalar multiplication
 pub mod scalar_mul;
 
-use crate::constraint_system::{variable::Variable, StandardComposer};
+use crate::constraint_system::{variable::Variable, PlookupComposer, StandardComposer};
 use dusk_bls12_381::BlsScalar;
 use dusk_jubjub::EDWARDS_D;
 
@@ -255,6 +255,25 @@ impl Point {
 // XXX: Should we put these as methods on the point struct instead?
 // Rationale, they only apply to points, whereas methods on the composer apply generally to Variables
 impl StandardComposer {
+    /// Asserts that a point in the circuit is equal to a known public point
+    pub fn assert_equal_public_point(
+        &mut self,
+        point: Point,
+        public_point: dusk_jubjub::JubJubAffine,
+    ) {
+        self.constrain_to_constant(point.x, BlsScalar::zero(), -public_point.get_x());
+        self.constrain_to_constant(point.y, BlsScalar::zero(), -public_point.get_y());
+    }
+    /// Asserts that a point in the circuit is equal to another point in the circuit
+    pub fn assert_equal_point(&mut self, point_a: Point, point_b: Point) {
+        self.assert_equal(point_a.x, point_b.x);
+        self.assert_equal(point_b.y, point_b.y);
+    }
+}
+
+// XXX: Should we put these as methods on the point struct instead?
+// Rationale, they only apply to points, whereas methods on the composer apply generally to Variables
+impl PlookupComposer {
     /// Asserts that a point in the circuit is equal to a known public point
     pub fn assert_equal_public_point(
         &mut self,

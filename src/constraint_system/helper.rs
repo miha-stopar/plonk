@@ -98,7 +98,7 @@ pub(crate) fn gadget_tester(
     verifier.verify(&proof, &vk, &public_inputs)
 }
 
-/// Takes a generic gadget function with no auxillary input and
+/// Takes a generic gadget function and
 /// tests whether it passes an end-to-end test
 pub(crate) fn gadget_plookup_tester(
     gadget: fn(composer: &mut PlookupComposer),
@@ -106,7 +106,7 @@ pub(crate) fn gadget_plookup_tester(
     lookup_table: PlookupTable4Arity,
 ) -> Result<(), Error> {
     // Common View
-    let public_parameters = PublicParameters::setup(2 * n, &mut rand::thread_rng())?;
+    let public_parameters = PublicParameters::setup(2 * n, &mut rand::thread_rng()).unwrap();
     // Provers View
     let (proof, public_inputs) = {
         // Create a prover struct
@@ -118,7 +118,9 @@ pub(crate) fn gadget_plookup_tester(
         gadget(&mut prover.mut_cs());
 
         // Commit Key
-        let (ck, _) = public_parameters.trim(2 * prover.cs.circuit_size().next_power_of_two())?;
+        let (ck, _) = public_parameters
+            .trim(2 * prover.cs.circuit_size().next_power_of_two())
+            .unwrap();
 
         // This ought to be added to shared preprocessing
         if prover.mut_cs().w_l.len() < lookup_table.0.len() {
@@ -128,14 +130,17 @@ pub(crate) fn gadget_plookup_tester(
         }
 
         // Preprocess circuit
-        prover.preprocess(&ck)?;
+        prover.preprocess(&ck).unwrap();
 
         // Once the prove method is called, the public inputs are cleared
         // So pre-fetch these before calling Prove
         let public_inputs = prover.cs.public_inputs.clone();
 
         // Compute Proof
-        (prover.prove_with_table(&ck, &lookup_table)?, public_inputs)
+        (
+            prover.prove_with_table(&ck, &lookup_table).unwrap(),
+            public_inputs,
+        )
     };
     // Verifiers view
     //
@@ -156,7 +161,9 @@ pub(crate) fn gadget_plookup_tester(
     }
 
     // Compute Commit and Verifier Key
-    let (ck, vk) = public_parameters.trim(verifier.cs.circuit_size().next_power_of_two()).unwrap();
+    let (ck, vk) = public_parameters
+        .trim(verifier.cs.circuit_size().next_power_of_two())
+        .unwrap();
 
     // Preprocess circuit
     verifier.preprocess(&ck).unwrap();

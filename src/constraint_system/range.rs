@@ -5,7 +5,7 @@
 // Copyright (c) DUSK NETWORK. All rights reserved.
 
 use crate::bit_iterator::*;
-use crate::constraint_system::{StandardComposer, PlookupComposer};
+use crate::constraint_system::{PlookupComposer, StandardComposer};
 use crate::constraint_system::{Variable, WireData};
 use dusk_bls12_381::BlsScalar;
 use dusk_bytes::Serializable;
