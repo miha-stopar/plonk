@@ -583,5 +583,98 @@ mod tests {
             .verify(&proof, &vk, &public_inputs, &lookup_table)
             .is_ok());
     }
+    #[test]
+    // XXX: Move this to integration tests
+    fn test_plookup_all_gates() {
+        use crate::constraint_system::ecc::scalar_mul::{
+            fixed_base::scalar_mul, variable_base::variable_base_scalar_mul,
+        };
+        use crate::constraint_system::ecc::Point;
+        use dusk_bytes::Serializable;
+        use dusk_jubjub::GENERATOR;
+        use dusk_jubjub::{JubJubAffine, JubJubExtended, JubJubScalar};
 
+        let res = gadget_tester(
+            |composer| {
+                use rand::Rng;
+                let mut rng = rand::thread_rng();
+
+                let table_length = 47;
+                for i in 0..table_length {
+                    composer.lookup_table.0.push([
+                        BlsScalar::random(&mut rng),
+                        BlsScalar::random(&mut rng),
+                        BlsScalar::random(&mut rng),
+                        BlsScalar::random(&mut rng),
+                    ]);
+                }
+
+                let some_row = composer.lookup_table.0[7];
+                let (r1, r2, r3, r4) = (some_row[0], some_row[1], some_row[2], some_row[3]);
+                let r1_var = composer.add_input(r1);
+                let r2_var = composer.add_input(r2);
+                let r3_var = composer.add_input(r3);
+                let r4_var = composer.add_input(r4);
+
+                // add a lookup query gate from the table
+                composer.plookup_gate(r1_var, r2_var, r3_var, Some(r4_var), BlsScalar::zero());
+
+                // add some arithmetic gates using the random values
+                let r1_r2_sum = composer.add(
+                    (BlsScalar::one(), r1_var),
+                    (BlsScalar::one(), r2_var),
+                    BlsScalar::zero(),
+                    BlsScalar::zero(),
+                );
+
+                let r3_r4_prod = composer.mul(
+                    BlsScalar::one(),
+                    r3_var,
+                    r4_var,
+                    BlsScalar::zero(),
+                    BlsScalar::zero(),
+                );
+
+                // test logic gates
+                let r1_xor_r2 = composer.xor_gate(r1_var, r2_var, 8);
+                let r1_and_zero = composer.and_gate(r1_var, composer.zero_var, 8);
+
+                // test a range gate
+                composer.range_gate(r1_xor_r2, 8);
+
+                // test a boolean gate
+                composer.boolean_gate(r1_and_zero);
+
+                // test curve addition, variable base
+                let jub_jub_generator: JubJubAffine = JubJubExtended::from(GENERATOR).into();
+                let gen_point = Point::from_private_affine(composer, jub_jub_generator);
+                let twice_gen_point = gen_point.fast_add(composer, gen_point);
+
+                // test curve scalar multiplication, variable base
+                // tests variable base addition as well
+                let scalar = JubJubScalar::from_bytes_wide(&[
+                    182, 44, 247, 214, 94, 14, 151, 208, 130, 16, 200, 204, 147, 32, 104, 166, 0,
+                    59, 52, 1, 1, 59, 103, 6, 169, 175, 51, 101, 234, 180, 125, 14, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0,
+                ]);
+                let bls_scalar = BlsScalar::from_bytes(&scalar.to_bytes()).unwrap();
+                let secret_scalar = composer.add_input(bls_scalar);
+
+                let expected_point: JubJubAffine =
+                    (JubJubExtended::from(GENERATOR) * scalar).into();
+
+                let point = Point::from_private_affine(composer, GENERATOR);
+
+                let var_point_scalar = variable_base_scalar_mul(composer, secret_scalar, point);
+                composer.assert_equal_public_point(var_point_scalar.into(), expected_point);
+
+                // test curve scalar multiplication, fixed base
+                // tests fixed base addition as well
+                let fixed_point_scalar = scalar_mul(composer, secret_scalar, GENERATOR.into());
+                composer.assert_equal_public_point(fixed_point_scalar.into(), expected_point);
+            },
+            128,
+        );
+    }
 }
