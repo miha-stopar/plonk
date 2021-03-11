@@ -475,107 +475,10 @@ mod tests {
     use super::super::helper::*;
     use super::*;
     use crate::commitment_scheme::kzg10::PublicParameters;
-    use crate::plookup::{PlookupTable4Arity, PreprocessedTable4Arity};
+    use crate::plookup::PreprocessedTable4Arity;
     use crate::proof_system::{Prover, Verifier};
 
     #[test]
-    /// Tests that a circuit initially has 3 gates
-    fn test_initial_circuit_size() {
-        let composer: StandardComposer = StandardComposer::new();
-        // Circuit size is n+3 because
-        // - We have an extra gate which forces the first witness to be zero. This is used when the advice wire is not being used.
-        // - We have two gates which ensure that the permutation polynomial is not the identity and
-        // - Another gate which ensures that the selector polynomials are not all zeroes
-        assert_eq!(3, composer.circuit_size())
-    }
-
-    #[allow(unused_variables)]
-    #[test]
-    #[ignore]
-    /// Tests that an empty circuit proof passes
-    fn test_prove_verify() {
-        let res = gadget_tester(
-            |composer| {
-                // do nothing except add the dummy constraints
-            },
-            200,
-        );
-        assert!(res.is_ok());
-    }
-
-    #[test]
-    fn test_conditional_select() {
-        let res = gadget_tester(
-            |composer| {
-                let bit_1 = composer.add_input(BlsScalar::one());
-                let bit_0 = composer.add_input(BlsScalar::zero());
-
-                let choice_a = composer.add_input(BlsScalar::from(10u64));
-                let choice_b = composer.add_input(BlsScalar::from(20u64));
-
-                let choice = composer.conditional_select(bit_1, choice_a, choice_b);
-                composer.assert_equal(choice, choice_a);
-
-                let choice = composer.conditional_select(bit_0, choice_a, choice_b);
-                composer.assert_equal(choice, choice_b);
-            },
-            32,
-        );
-        assert!(res.is_ok());
-    }
-
-    #[test]
-    // XXX: Move this to integration tests
-    fn test_multiple_proofs() {
-        let public_parameters = PublicParameters::setup(2 * 30, &mut rand::thread_rng()).unwrap();
-
-        // Create a prover struct
-        let mut prover = Prover::new(b"demo");
-
-        // Add gadgets
-        dummy_gadget(10, prover.mut_cs());
-
-        // Commit Key
-        let (ck, _) = public_parameters.trim(2 * 20).unwrap();
-
-        // Preprocess circuit
-        prover.preprocess(&ck).unwrap();
-
-        let public_inputs = prover.cs.public_inputs.clone();
-        let lookup_table = prover.cs.lookup_table.clone();
-
-        let mut proofs = Vec::new();
-
-        // Compute multiple proofs
-        for _ in 0..3 {
-            proofs.push(prover.prove(&ck).unwrap());
-
-            // Add another witness instance
-            dummy_gadget(10, prover.mut_cs());
-        }
-
-        // Verifier
-        //
-        let mut verifier = Verifier::new(b"demo");
-
-        // Add gadgets
-        dummy_gadget(10, verifier.mut_cs());
-
-        // Commit and Verifier Key
-        let (ck, vk) = public_parameters.trim(2 * 20).unwrap();
-
-        // Preprocess
-        verifier.preprocess(&ck).unwrap();
-
-        for proof in proofs {
-            assert!(verifier
-                .verify(&proof, &vk, &public_inputs, &lookup_table)
-                .is_ok());
-        }
-    }
-
-    #[test]
-    #[ignore]
     fn test_plookup_full() {
         let public_parameters = PublicParameters::setup(2 * 30, &mut rand::thread_rng()).unwrap();
         let mut composer = StandardComposer::new();
@@ -631,13 +534,23 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    /// Tests that a circuit initially has 3 gates
+    fn test_initial_circuit_size() {
+        let composer: StandardComposer = StandardComposer::new();
+        // Circuit size is n+3 because
+        // - We have an extra gate which forces the first witness to be zero. This is used when the advice wire is not being used.
+        // - We have two gates which ensure that the permutation polynomial is not the identity and
+        // - Another gate which ensures that the selector polynomials are not all zeroes
+        assert_eq!(3, composer.circuit_size())
+    }
+
+    #[test]
     // XXX: Move this to integration tests
     fn test_plookup_proof() {
         let public_parameters = PublicParameters::setup(2 * 30, &mut rand::thread_rng()).unwrap();
 
         // Create a prover struct
-        let mut prover = Prover::new(b"demo");
+        let mut prover = Prover::new(b"test");
 
         // Add gadgets
         dummy_gadget_plookup(4, prover.mut_cs());
@@ -655,7 +568,7 @@ mod tests {
 
         // Verifier
         //
-        let mut verifier = Verifier::new(b"demo");
+        let mut verifier = Verifier::new(b"test");
 
         // Add gadgets
         dummy_gadget_plookup(4, verifier.mut_cs());
@@ -670,4 +583,5 @@ mod tests {
             .verify(&proof, &vk, &public_inputs, &lookup_table)
             .is_ok());
     }
+
 }
