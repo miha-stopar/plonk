@@ -479,6 +479,62 @@ mod tests {
     use crate::proof_system::{Prover, Verifier};
 
     #[test]
+    fn xor_plookup() ->std::io::Result<()> {
+        use std::io::prelude::*;
+        use std::fs::File;
+
+        let public_parameters = PublicParameters::setup(2 * 8, &mut rand::thread_rng()).unwrap();
+
+        let mut f = File::create("setup.small")?;
+        f.write_all(&public_parameters.into_bytes())?;
+
+        let mut f = File::open("setup.small")?;
+        let mut buffer = Vec::new();
+        // read the whole file
+        f.read_to_end(&mut buffer)?;
+        unsafe {
+            let public_parameters = PublicParameters::from_slice_unchecked(&buffer);
+        }
+
+        Ok(())
+    /*
+        let mut composer = StandardComposer::new();
+
+        // Create a prover struct
+        let mut prover = Prover::new(b"xor");
+
+        // add to trans
+        prover.key_transcript(b"key", b"additional seed information");
+
+        for i in 0..2u64.pow(8) {
+            for j in 0..2u64.pow(8) {
+                composer.lookup_table.0.push([
+                    BlsScalar::from(i),
+                    BlsScalar::from(j),
+                    BlsScalar::from(i^j),
+                    BlsScalar::zero(),
+                ]);
+                println!("row {:?} {:?} {:?}", i, j, i^j);
+            }
+        }
+
+        // Add gadgets
+        dummy_gadget_plookup(2usize.pow(16), &mut composer);
+    
+        // Commit Key
+        //let (ck, _) = public_parameters.trim(2 * 20).unwrap();
+
+        // Preprocess circuit
+        //prover.preprocess(&ck).unwrap();
+
+        //let public_inputs = prover.cs.public_inputs.clone();
+        //let lookup_table = prover.cs.lookup_table.clone();
+
+        //let proof = prover.prove(&ck).unwrap();
+    */
+    }
+
+    #[test]
     fn test_plookup_full() {
         let public_parameters = PublicParameters::setup(2 * 30, &mut rand::thread_rng()).unwrap();
         let mut composer = StandardComposer::new();
@@ -676,5 +732,7 @@ mod tests {
             },
             128,
         );
+
+    assert!(res.is_ok());
     }
 }
