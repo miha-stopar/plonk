@@ -550,7 +550,7 @@ mod tests {
 
                 let result = composer.add((BlsScalar::from(1<<16), pair0123), (BlsScalar::one(), pair4567), BlsScalar::zero(), BlsScalar::zero());
             },
-            256,
+            512,
         );
 
         assert!(res.is_ok());
