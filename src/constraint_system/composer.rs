@@ -742,7 +742,7 @@ mod tests {
                 let fixed_point_scalar = scalar_mul(composer, secret_scalar, GENERATOR.into());
                 composer.assert_equal_public_point(fixed_point_scalar.into(), expected_point);
             },
-            128,
+            4096,
         );
 
     assert!(res.is_ok());
