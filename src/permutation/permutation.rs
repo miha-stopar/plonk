@@ -802,7 +802,7 @@ mod test {
         // x3 * x4 = 2*x2
         cs.poly_gate(x3, x4, x2, one, zero, zero, -two, zero, zero);
 
-        let domain = EvaluationDomain::new(cs.circuit_size()).unwrap();
+        let domain = EvaluationDomain::new(cs.total_size()).unwrap();
         let pad = vec![BlsScalar::zero(); domain.size() - cs.w_l.len()];
         let mut w_l_scalar: Vec<BlsScalar> = cs.w_l.iter().map(|v| cs.variables[v]).collect();
         let mut w_r_scalar: Vec<BlsScalar> = cs.w_r.iter().map(|v| cs.variables[v]).collect();

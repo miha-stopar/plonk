@@ -52,7 +52,7 @@ pub(crate) fn gadget_tester(
     n: usize,
 ) -> Result<(), Error> {
     // Common View
-    let public_parameters = PublicParameters::setup(2 * n, &mut rand::thread_rng())?;
+    let public_parameters = PublicParameters::setup(2 * n, &mut rand::thread_rng()).unwrap();
     // Provers View
     let (proof, public_inputs, lookup_table) = {
         // Create a prover struct
@@ -65,10 +65,10 @@ pub(crate) fn gadget_tester(
         gadget(&mut prover.mut_cs());
 
         // Commit Key
-        let (ck, _) = public_parameters.trim(2 * prover.cs.circuit_size().next_power_of_two())?;
+        let (ck, _) = public_parameters.trim(2 * prover.cs.total_size().next_power_of_two()).unwrap();
 
         // Preprocess circuit
-        prover.preprocess(&ck)?;
+        prover.preprocess(&ck).unwrap();
 
         // Once the prove method is called, the public inputs are cleared
         // So pre-fetch these before calling Prove
@@ -76,7 +76,7 @@ pub(crate) fn gadget_tester(
         let lookup_table = prover.cs.lookup_table.clone();
 
         // Compute Proof
-        (prover.prove(&ck)?, public_inputs, lookup_table)
+        (prover.prove(&ck).unwrap(), public_inputs, lookup_table)
     };
     // Verifiers view
     //
@@ -90,10 +90,10 @@ pub(crate) fn gadget_tester(
     gadget(&mut verifier.mut_cs());
 
     // Compute Commit and Verifier Key
-    let (ck, vk) = public_parameters.trim(verifier.cs.circuit_size().next_power_of_two())?;
+    let (ck, vk) = public_parameters.trim(verifier.cs.total_size().next_power_of_two()).unwrap();
 
     // Preprocess circuit
-    verifier.preprocess(&ck)?;
+    verifier.preprocess(&ck).unwrap();
 
     // Verify proof
     verifier.verify(&proof, &vk, &public_inputs, &lookup_table)

@@ -100,10 +100,7 @@ impl Prover {
         prover_key: &ProverKey,
     ) -> Result<Proof, Error> {
         // make sure the domain is big enough to handle the circuit as well as the lookup table
-        let domain = EvaluationDomain::new(std::cmp::max(
-            self.cs.circuit_size(),
-            self.cs.lookup_table.0.len(),
-        ))?;
+        let domain = EvaluationDomain::new(self.cs.total_size())?;
 
         // Since the caller is passing a pre-processed circuit
         // We assume that the Transcript has been seeded with the preprocessed

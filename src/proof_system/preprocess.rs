@@ -234,7 +234,7 @@ impl StandardComposer {
         commit_key: &CommitKey,
         transcript: &mut Transcript,
     ) -> Result<(widget::VerifierKey, SelectorPolynomials, EvaluationDomain), Error> {
-        let domain = EvaluationDomain::new(self.circuit_size())?;
+        let domain = EvaluationDomain::new(self.total_size())?;
 
         // Check that the length of the wires is consistent.
         self.check_poly_same_len()?;
@@ -327,7 +327,7 @@ impl StandardComposer {
         };
 
         let verifier_key = widget::VerifierKey {
-            n: self.circuit_size(),
+            n: self.total_size(),
             arithmetic: arithmetic_verifier_key,
             logic: logic_verifier_key,
             range: range_verifier_key,

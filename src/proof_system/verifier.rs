@@ -57,6 +57,11 @@ impl Verifier {
         self.cs.circuit_size()
     }
 
+    /// Returns the number of rows in the lookup table.
+    pub fn table_size(&self) -> usize {
+        self.cs.lookup_table.0.len()
+    }
+
     /// Returns a mutable copy of the underlying composer
     pub fn mut_cs(&mut self) -> &mut StandardComposer {
         &mut self.cs

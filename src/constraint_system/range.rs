@@ -18,7 +18,7 @@ impl StandardComposer {
         // based on the accumulator number a_i
         let add_wire = |composer: &mut StandardComposer, i: usize, variable: Variable| {
             // Since four quads can fit into one gate, the gate index does not change for every four wires
-            let gate_index = composer.circuit_size() + (i / 4);
+            let gate_index = composer.total_size() + (i / 4);
 
             let wire_data = match i % 4 {
                 0 => {

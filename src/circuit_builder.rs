@@ -257,7 +257,7 @@ mod tests {
             let a = composer.add_input(inputs[0]);
             let b = composer.add_input(inputs[1]);
             // Make first constraint a + b = c
-            pi.push(PublicInput::BlsScalar(-inputs[2], composer.circuit_size()));
+            pi.push(PublicInput::BlsScalar(-inputs[2], composer.total_size()));
             composer.poly_gate(
                 a,
                 b,
@@ -274,7 +274,7 @@ mod tests {
             composer.range_gate(a, 1 << 6);
             composer.range_gate(b, 1 << 5);
             // Make second constraint a * b = d
-            pi.push(PublicInput::BlsScalar(-inputs[3], composer.circuit_size()));
+            pi.push(PublicInput::BlsScalar(-inputs[3], composer.total_size()));
             composer.poly_gate(
                 a,
                 b,

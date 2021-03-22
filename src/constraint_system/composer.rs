@@ -90,6 +90,16 @@ impl StandardComposer {
     pub fn circuit_size(&self) -> usize {
         self.n
     }
+
+    /// Returns the number of rows in the lookup table.
+    pub fn table_size(&self) -> usize {
+        self.lookup_table.0.len()
+    }
+
+    /// Returns the size of the combined circuit and lookup table
+    pub fn total_size(&self) -> usize {
+        std::cmp::max(self.circuit_size(), self.table_size())
+    }
 }
 
 impl Default for StandardComposer {
@@ -609,7 +619,7 @@ mod tests {
         // - We have an extra gate which forces the first witness to be zero. This is used when the advice wire is not being used.
         // - We have two gates which ensure that the permutation polynomial is not the identity and
         // - Another gate which ensures that the selector polynomials are not all zeroes
-        assert_eq!(3, composer.circuit_size())
+        assert_eq!(3, composer.total_size())
     }
 
     #[test]
