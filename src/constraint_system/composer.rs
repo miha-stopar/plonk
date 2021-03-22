@@ -438,10 +438,10 @@ impl StandardComposer {
             None => self.zero_var,
         };
 
-        self.w_l.push(self.zero_var);
-        self.w_r.push(self.zero_var);
-        self.w_o.push(self.zero_var);
-        self.w_4.push(self.zero_var);
+        self.w_l.push(a);
+        self.w_r.push(b);
+        self.w_o.push(c);
+        self.w_4.push(d);
 
         // Add selector vectors
         self.q_l.push(BlsScalar::zero());
@@ -479,59 +479,71 @@ mod tests {
     use crate::proof_system::{Prover, Verifier};
 
     #[test]
-    fn xor_plookup() ->std::io::Result<()> {
-        use std::io::prelude::*;
-        use std::fs::File;
+    fn xor_plookup() {
+        let res = gadget_tester(
+            |composer| {
 
-        let public_parameters = PublicParameters::setup(2 * 8, &mut rand::thread_rng()).unwrap();
+                use rand::Rng;
+                let mut rng = rand::thread_rng();     
 
-        let mut f = File::create("setup.small")?;
-        f.write_all(&public_parameters.into_bytes())?;
+                fn to_le_nibbles(input: u32) -> [u8; 8] {
+                    let mut inp = input;
+                    let mut nibbles: [u8; 8] = [0; 8];
+                    for i in 0..8 {
+                        nibbles[i] = ((inp >> (28-4*i)) % 16) as u8;
+                    }
+                    nibbles
+                }
 
-        let mut f = File::open("setup.small")?;
-        let mut buffer = Vec::new();
-        // read the whole file
-        f.read_to_end(&mut buffer)?;
-        unsafe {
-            let public_parameters = PublicParameters::from_slice_unchecked(&buffer);
-        }
+                // create XOR lookup table out of 4-bit nibbles
+                for i in 0..2u8.pow(4) {
+                    for j in 0..2u8.pow(4) {
+                        composer.lookup_table.0.push([
+                            BlsScalar::from(i as u64),
+                            BlsScalar::from(j as u64),
+                            BlsScalar::from((i^j) as u64),
+                            BlsScalar::zero(),
+                        ]);
+                    }
+                }
 
-        Ok(())
-    /*
-        let mut composer = StandardComposer::new();
+                // generate random 32-bit numbers and their XOR
+                let m1: u32 = rng.gen();
+                let m2: u32 = rng.gen();
+                let m3 = m1 ^ m2;
 
-        // Create a prover struct
-        let mut prover = Prover::new(b"xor");
+                // decompose m1 and m2 into nibbles
+                let m1_nibbles = to_le_nibbles(m1);
+                let m2_nibbles = to_le_nibbles(m2);
+                let m3_nibbles = to_le_nibbles(m3);
 
-        // add to trans
-        prover.key_transcript(b"key", b"additional seed information");
+                // add each nibble as a variable to the composer
+                let m1_nibble_var: Vec<Variable> = m1_nibbles.iter().map(|b| composer.add_input(BlsScalar::from(*b as u64))).collect();
+                let m2_nibble_var: Vec<Variable> = m2_nibbles.iter().map(|b| composer.add_input(BlsScalar::from(*b as u64))).collect();
+                let m3_nibble_var: Vec<Variable> = m3_nibbles.iter().map(|b| composer.add_input(BlsScalar::from(*b as u64))).collect();
 
-        for i in 0..2u64.pow(8) {
-            for j in 0..2u64.pow(8) {
-                composer.lookup_table.0.push([
-                    BlsScalar::from(i),
-                    BlsScalar::from(j),
-                    BlsScalar::from(i^j),
-                    BlsScalar::zero(),
-                ]);
-                println!("row {:?} {:?} {:?}", i, j, i^j);
-            }
-        }
+                // add plookup XOR gate for each nibble and compute output (outght to be identical to m3 nibbles)
+                let mut xor_out_var: Vec<Variable> = vec![];
 
-        // Add gadgets
-        dummy_gadget_plookup(2usize.pow(16), &mut composer);
-    
-        // Commit Key
-        //let (ck, _) = public_parameters.trim(2 * 20).unwrap();
+                for i in 0..8 {
+                    xor_out_var.push(composer.plookup_gate(m1_nibble_var[i], m2_nibble_var[i], m3_nibble_var[i], None, BlsScalar::zero()));
+                };
 
-        // Preprocess circuit
-        //prover.preprocess(&ck).unwrap();
+                // recompose XOR output nibbles to show equality with m3
+                let pair01 = composer.add((BlsScalar::from(1<<4), xor_out_var[0]), (BlsScalar::one(), xor_out_var[1]), BlsScalar::zero(), BlsScalar::zero());
+                let pair23 = composer.add((BlsScalar::from(1<<4), xor_out_var[2]), (BlsScalar::one(), xor_out_var[3]), BlsScalar::zero(), BlsScalar::zero());
+                let pair45 = composer.add((BlsScalar::from(1<<4), xor_out_var[4]), (BlsScalar::one(), xor_out_var[5]), BlsScalar::zero(), BlsScalar::zero());
+                let pair67 = composer.add((BlsScalar::from(1<<4), xor_out_var[6]), (BlsScalar::one(), xor_out_var[7]), BlsScalar::zero(), BlsScalar::zero());
 
-        //let public_inputs = prover.cs.public_inputs.clone();
-        //let lookup_table = prover.cs.lookup_table.clone();
+                let pair0123 = composer.add((BlsScalar::from(1<<8), pair01), (BlsScalar::one(), pair23), BlsScalar::zero(), BlsScalar::zero());
+                let pair4567 = composer.add((BlsScalar::from(1<<8), pair45), (BlsScalar::one(), pair67), BlsScalar::zero(), BlsScalar::zero());
 
-        //let proof = prover.prove(&ck).unwrap();
-    */
+                let result = composer.add((BlsScalar::from(1<<16), pair0123), (BlsScalar::one(), pair4567), BlsScalar::zero(), BlsScalar::zero());
+            },
+            256,
+        );
+
+        assert!(res.is_ok());
     }
 
     #[test]
