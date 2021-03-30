@@ -42,38 +42,20 @@ impl StandardComposer {
         }
     }
 
-    /// Recursively creates a variable y = x_0*2^(8*n) + x_1*2^(8*(n-1)) + ... + x_(n-1)*2^(8*1) + x_n
-    /// from n = 2^k bytes
-    pub fn compose_scalar_from_bytes(&mut self, bytes: &[Variable]) -> Variable {
+    pub fn compose_scalar_from_le_bytes(&mut self, bytes: &[Variable]) -> Variable {
         // Checks if bytes.len() is a power of two
         assert_eq!(bytes.len(), 32);
 
-        let mut pairs = [self.zero_var; 16];
-        for i in 0..16 {
-            pairs[i] = self.add(
-                (BlsScalar::from(1 << 8), bytes[2*i+1]),
-                (BlsScalar::one(), bytes[2*i]),
-                BlsScalar::zero(),
-                BlsScalar::zero(),
-            );
-        }
-
-        let mut quads = [self.zero_var; 8];
+        let mut words = [self.zero_var; 8];
         for i in 0..8 {
-            quads[i] = self.add(
-                (BlsScalar::from(1 << 16), pairs[2*i+1]),
-                (BlsScalar::one(), pairs[2*i]),
-                BlsScalar::zero(),
-                BlsScalar::zero(),
-            );
+            words[i] = self.compose_word_from_le_bytes(&bytes[4*i..4*(i+1)]);
         }
-
 
         let mut octs = [self.zero_var; 4];
         for i in 0..4 {
             octs[i] = self.add(
-                (BlsScalar::from(1 << 32), quads[2*i+1]),
-                (BlsScalar::one(), quads[2*i]),
+                (BlsScalar::from(1 << 32), words[2*i+1]),
+                (BlsScalar::one(), words[2*i]),
                 BlsScalar::zero(),
                 BlsScalar::zero(),
             );
@@ -100,7 +82,8 @@ impl StandardComposer {
     /// Creates a variable y = x0*2^(8*3) + x1*2^(8*2) + x2*2^(8*1) + x3
     /// such that if x0..x3 are bytes, then y is the 32-bit concatenation
     /// x0|x1|x2|x3. 
-    pub fn compose_word_from_bytes(&mut self, bytes: &[Variable]) -> Variable {
+    pub fn compose_word_from_le_bytes(&mut self, bytes: &[Variable]) -> Variable {
+        assert_eq!(bytes.len(), 4);
         let pair_hi = self.add(
             (BlsScalar::from(1 << 24), bytes[3]),
             (BlsScalar::from(1 << 16), bytes[2]),
@@ -144,45 +127,20 @@ impl StandardComposer {
 
     /// Decomposes a variable d into 4 bytes d0, d1, d2, d3 so that
     /// d = d0|d1|d2|d3 and adds the required gates showing decomposition is correct
-    pub fn decompose_into_bytes(&mut self, d: Variable) -> (Variable, Variable, Variable, Variable) {
-        let mut d_value = self.variables[&d].reduce().0[0];
-        
-        // compute d0..d3 so that d3|d2|d1|d0 = d
-        let d0 = self.add_input(BlsScalar::from(d_value % 2_u64.pow(8)));
-        d_value >>= 8;
-        let d1 = self.add_input(BlsScalar::from(d_value % 2_u64.pow(8)));
-        d_value >>= 8;
-        let d2 = self.add_input(BlsScalar::from(d_value % 2_u64.pow(8)));
-        d_value >>= 8;
-        let d3 = self.add_input(BlsScalar::from(d_value % 2_u64.pow(8)));
-        
-        let pair_hi = self.add(
-            (BlsScalar::from(1 << 24), d3),
-            (BlsScalar::from(1 << 16), d2),
-            BlsScalar::zero(),
-            BlsScalar::zero(),
-        );
+    pub fn decompose_word_into_le_bytes(&mut self, word: Variable) -> [Variable; 4] {
+        let word_value = self.variables[&word].reduce().0[0];
+        let word_bytes = word_value.to_le_bytes();
+        let mut word_vars = [self.zero_var; 4];
 
-        let pair_lo = self.add(
-            (BlsScalar::from(1 << 8), d1),
-            (BlsScalar::one(), d0),
-            BlsScalar::zero(),
-            BlsScalar::zero(),
-        );
+        // create variables for each byte
+        for i in 0..4 {
+            word_vars[i] = self.add_input(BlsScalar::from(word_bytes[i] as u64));
+        }
+       
+        // show bytes compose to input word
+        self.compose_word_from_le_bytes(&word_vars);
 
-        // show recomposed bytes equals the input d
-        self.add_gate(
-            pair_lo,
-            pair_hi,
-            d,
-            BlsScalar::one(),
-            BlsScalar::one(),
-            -BlsScalar::one(),
-            BlsScalar::zero(),
-            BlsScalar::zero(),
-        );
-
-        (d0, d1, d2, d3)
+        word_vars
     }
     
     /// Adds three variables by adding byte-by-byte, composing the bytes, and modding
@@ -209,18 +167,18 @@ impl StandardComposer {
 
         // compose the bytes back into a single integer      
         // so we can compute the mod operation
-        let sum = self.compose_word_from_bytes(&v[4*a..(4*a+4)]);
+        let sum = self.compose_word_from_le_bytes(&v[4*a..(4*a+4)]);
 
         // compute the remainder mod 2^32
         let remainder = self.mod_u32(sum);
 
         // decompose remainder back into bytes and add
         // gates showing decomposition is correct
-        let decomposed_bytes = self.decompose_into_bytes(remainder);
-        v[4*a] = decomposed_bytes.0;
-        v[4*a+1] = decomposed_bytes.1;
-        v[4*a+2] = decomposed_bytes.2;
-        v[4*a+3] = decomposed_bytes.3;
+        let decomposed_bytes = self.decompose_word_into_le_bytes(remainder);
+        v[4*a] = decomposed_bytes[0];
+        v[4*a+1] = decomposed_bytes[1];
+        v[4*a+2] = decomposed_bytes[2];
+        v[4*a+3] = decomposed_bytes[3];
     }
 
     /// Adds two variables by adding byte-by-byte, composing the bytes, and modding
@@ -239,19 +197,19 @@ impl StandardComposer {
 
         // compose the bytes back into a single integer      
         // so we can compute the mod operation
-        let sum = self.compose_word_from_bytes(&v[4*c..(4*c+4)]);
+        let sum = self.compose_word_from_le_bytes(&v[4*c..(4*c+4)]);
 
         // compute the remainder mod 2^32
         let remainder = self.mod_u32(sum);
 
         // decompose remainder back into bytes and add
         // gates showing decomposition is correct
-        let decomposed_bytes = self.decompose_into_bytes(remainder);
+        let decomposed_bytes = self.decompose_word_into_le_bytes(remainder);
 
-        v[4*c] = decomposed_bytes.0;
-        v[4*c+1] = decomposed_bytes.1;
-        v[4*c+2] = decomposed_bytes.2;
-        v[4*c+3] = decomposed_bytes.3;
+        v[4*c] = decomposed_bytes[0];
+        v[4*c+1] = decomposed_bytes[1];
+        v[4*c+2] = decomposed_bytes[2];
+        v[4*c+3] = decomposed_bytes[3];
     }
 
     /// Rotates to the right by 16 bits by shuffling variables in the working vector
@@ -266,11 +224,11 @@ impl StandardComposer {
 
     /// Rotates to the right by 8 bits by shuffling variables in the working vector
     fn rotate_8(&mut self, v: &mut [Variable; 64], n: usize) {
-        // rotate bytes to the right 1 so that v[n+1] := v[n] etc.
+        // rotate bytes to the right 1 so that v[n-1] := v[n] etc.
         let mut initial = [self.zero_var; 4];
         initial.clone_from_slice(&v[4*n..(4*n+4)]);
         for i in 0..4 {
-            v[4*n+(i+1)%4] = initial[i]; 
+            v[4*n+(i+3)%4] = initial[i]; 
         }
     }
 
@@ -278,7 +236,7 @@ impl StandardComposer {
     fn rotate_12(&mut self, v: &mut [Variable; 64], n: usize) {
         // first split each byte into 4-bit nibbles
         let mut nibbles = [self.zero_var; 8];
-        for i in 0..4 {
+        for i in (0..4).rev() {
             let current_byte = self.variables[&v[4*n+i]].reduce().0[0];
             let hi = current_byte >> 4;
             let lo = current_byte % (1 << 4);
@@ -292,7 +250,7 @@ impl StandardComposer {
         for i in 0..4 {
             v[4*n+i] =  self.add(
                 (BlsScalar::from(1 << 4), nibbles[(2*i+5)%8]),
-                (BlsScalar::one(), nibbles[(2*i+6)%8]),
+                (BlsScalar::one(), nibbles[(2*i+2)%8]),
                 BlsScalar::zero(),
                 BlsScalar::zero(),
             );
@@ -304,7 +262,7 @@ impl StandardComposer {
         
         // first split each byte into 7 high bits and 1 low bit
         let mut split_bytes = [self.zero_var; 8];
-        for i in 0..4 {
+        for i in (0..4).rev() {
             let current_byte = self.variables[&v[4*n+i]].reduce().0[0];
             // 1 high bit
             let hi = current_byte >> 7;
@@ -318,11 +276,11 @@ impl StandardComposer {
 
         // now recompose the 4 pairs of high and low bits into 4 bytes, shifting 
         // shifting 1 space to the right, so that the new first byte is lo|hi, 
-        // using the low bits at index 7 and the high bit at index 0
+        // using the low bits at index 3 and the high bit at index 0
         for i in 0..4 {
             v[4*n+i] =  self.add(
                 // 7 low bits become new high bits
-                (BlsScalar::from(2), split_bytes[(2*i+7)%8]),
+                (BlsScalar::from(2), split_bytes[(2*i+3)%8]),
                 // 7 high bits become new low bits
                 (BlsScalar::one(), split_bytes[(2*i)%8]),
                 BlsScalar::zero(),
@@ -424,7 +382,7 @@ impl StandardComposer {
             .unwrap()
     }
 
-    fn compression(&mut self, h: &mut [Variable; 32], m: [Variable; 64], t: [Variable; 8]) {
+    fn compression(&mut self, h: &mut [Variable; 32], m: [Variable; 64]) {
 
         // Copied from RFC
         // 4*SIGMA[round][index]
@@ -443,9 +401,6 @@ impl StandardComposer {
 
         let IV = self.generate_IV();
         let mut v: [Variable; 64] = [*h, IV].concat().try_into().unwrap();
-
-        // XOR the bit offset
-        self.xor(&mut v[48..56], &t);
 
         // Our messages will never exceed one block, so the "final block"
         // flag is always true, and we always invert the bits of v[14].
@@ -483,22 +438,14 @@ impl StandardComposer {
         // XOR h[0] with parameter 0x01010000 ^ (kk << 8) ^ nn
         // kk = 0 bytes, nn = 32 bytes
         // 0x01010000 ^ (0x0 << 8) ^ 0x20 = 0x01010020
-        let parameter_vec = vec![self.add_input(BlsScalar::one()), self.add_input(BlsScalar::one()), self.zero_var, self.add_input(BlsScalar::from(32))];
+        let parameter_vec = vec![self.add_input(BlsScalar::from(32)), self.zero_var, self.add_input(BlsScalar::one()), self.add_input(BlsScalar::one())];
         self.xor(&mut h[0..4], &parameter_vec);
 
-        // h := F( h, d[dd - 1], ll + bb, TRUE )
-        // ll = input bytes = 32 = 0x20
-        // bb = block bytes = 64 = 0x40
-        // t = ll + bb = 96 = 0x0000000000000060
-
-        let t = [self.zero_var, self.zero_var, self.zero_var, self.zero_var, self.zero_var, self.zero_var, self.zero_var, self.add_input(BlsScalar::from(96))];
         let m: [Variable; 64] = [message, [self.zero_var; 32]].concat().try_into().unwrap();
-
-        self.compression(&mut h, m, t);
+        self.compression(&mut h, m);
 
         h
     }
-
 
     fn scalar_to_byte_vars(&mut self, scalar: BlsScalar) -> [Variable; 32] {
         scalar.reduce().0.into_iter()
@@ -509,15 +456,12 @@ impl StandardComposer {
 
     fn blake2s_preimage(&mut self, preimage: BlsScalar, image: BlsScalar) {
         let message = self.scalar_to_byte_vars(preimage);
-        println!("message");
-        self.print_vars(message.to_vec());
         let hash = self.scalar_to_byte_vars(image);
+        println!("{:?}", image);
         let results = self.blake2s_256(message);
-        println!("blake results");
-        let result_var = self.compose_scalar_from_bytes(&results);
-        println!("{:016x?}", self.variables[&result_var].reduce().0);
-        println!("target");
-        self.print_vars(hash.to_vec());
+        let result_var = self.compose_scalar_from_le_bytes(&results);
+        println!("{:?}", self.variables[&result_var]);
+
     }
 
     fn print_vars(&mut self, v: Vec<Variable>) {
@@ -536,6 +480,11 @@ impl StandardComposer {
         }
         let int_strings: Vec<String> = ints.iter().map(|i| format!("{:08x}", (u64::from_be_bytes(i.reduce().0[0].to_le_bytes()) >> 32) as u32)).collect();
         println!("{}", int_strings.join(" "));
+    }
+
+    fn print_var_bytes(&mut self, v: Vec<Variable>) {
+        let bytes = v.iter().map(|b| (self.variables[&b].reduce().0[0] % 256) as u8).collect::<Vec<u8>>();
+        println!("{:02x?}", bytes);
     }
 }
 
@@ -570,7 +519,7 @@ mod tests {
             ];
             let mut v = [composer.zero_var; 64];
             for i in 0..16 {
-                let v_bytes = initial_v[i].to_be_bytes();
+                let v_bytes = initial_v[i].to_le_bytes();
                 for j in 0..4 {
                     v[4*i+j] = composer.add_input(BlsScalar::from(v_bytes[j] as u64));
                 }
@@ -606,7 +555,7 @@ mod tests {
 
             let mut v_u32 = [0u32; 16];
             for i in 0..16 {
-                v_u32[i] = u32::from_be_bytes((&v_bytes[4*i..(4*i+4)]).try_into().expect("Wrong length"));
+                v_u32[i] = u32::from_le_bytes((&v_bytes[4*i..(4*i+4)]).try_into().expect("Wrong length"));
             }
             assert_eq!(comparison, v_u32);
         }
@@ -637,5 +586,22 @@ mod tests {
         let hash = BlsScalar::from_bytes_wide(&hash_bytes);
         
         composer.blake2s_preimage(message, hash);
+    }
+
+    #[test]
+    fn test_endianness() {
+        use std::convert::TryInto;
+        let mut composer = StandardComposer::new();
+        let mut test_vector = [composer.zero_var; 64];
+        let test_var = composer.add_input(BlsScalar::from(0x4382d520));
+        let test_var_bytes = composer.decompose_word_into_le_bytes(test_var);
+        for i in 0..4 {
+            test_vector[i] = test_var_bytes[i];
+        }
+        composer.print_var_bytes(test_vector.to_vec());
+
+
+        composer.rotate_7(&mut test_vector, 0);
+        composer.print_var_bytes(test_vector.to_vec());
     }
 }
