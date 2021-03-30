@@ -24,6 +24,8 @@ pub(crate) mod helper;
 pub mod logic;
 /// Range gate
 pub mod range;
+/// Blake2s hash widget
+pub mod blake2s;
 
 pub use composer::StandardComposer;
 pub use variable::{Variable, WireData};
