@@ -42,6 +42,7 @@ impl StandardComposer {
         }
     }
 
+    /// Creates a single 256-bit scalar variable from 32 byte variables 
     pub fn compose_scalar_from_le_bytes(&mut self, bytes: &[Variable]) -> Variable {
         // Checks if bytes.len() is a power of two
         assert_eq!(bytes.len(), 32);
@@ -281,7 +282,7 @@ impl StandardComposer {
             v[4*n+i] =  self.add(
                 // 7 low bits become new high bits
                 (BlsScalar::from(2), split_bytes[(2*i+3)%8]),
-                // 7 high bits become new low bits
+                // 1 high bit becomes new low bit
                 (BlsScalar::one(), split_bytes[(2*i)%8]),
                 BlsScalar::zero(),
                 BlsScalar::zero(),
@@ -310,14 +311,13 @@ impl StandardComposer {
 
     /// Performs an XOR in place, mutating the left word
     pub fn xor(&mut self, left: &mut [Variable], right: &[Variable]) {
-        let mut initial = [self.zero_var; 4];
-        initial.clone_from_slice(&left[0..4]);
+
         // left := left ^ right
-        for i in 0..4 {
-            let left_val = self.variables[&initial[i]].reduce().0[0];
+        for i in 0..left.len() {
+            let left_val = self.variables[&left[i]].reduce().0[0];
             let right_val = self.variables[&right[i]].reduce().0[0];
             let out_var = self.add_input(BlsScalar::from(left_val ^ right_val));
-            left[i] = self.plookup_gate(initial[i], right[i], out_var, None, BlsScalar::zero());
+            left[i] = self.plookup_gate(left[i], right[i], out_var, None, BlsScalar::zero());
         }
     }
 
@@ -364,7 +364,9 @@ impl StandardComposer {
         self.rotate(v, b, 7);
     }
 
-    pub fn generate_IV(&mut self) -> [Variable; 32] {
+    /// Generate initial values from fractional part of the square root
+    /// of the first 8 primes
+    pub fn generate_iv(&mut self) -> [Variable; 32] {
         // Since our message is <= one block in length, we can shortcut a step by
         // doubling the IV vector
         vec![2.0, 3.0, 5.0, 7.0, 11.0, 13.0, 17.0, 19.0]
@@ -382,7 +384,7 @@ impl StandardComposer {
             .unwrap()
     }
 
-    fn compression(&mut self, h: &mut [Variable; 32], m: [Variable; 64]) {
+    fn compression(&mut self, h: &mut [Variable; 32], m: [Variable; 64], t: u8) {
 
         // Copied from RFC
         // 4*SIGMA[round][index]
@@ -399,8 +401,8 @@ impl StandardComposer {
             [10,2,8,4,7,6,1,5,15,11,9,14,3,12,13,0],
         ];
 
-        let IV = self.generate_IV();
-        let mut v: [Variable; 64] = [*h, IV].concat().try_into().unwrap();
+        let iv = self.generate_iv();
+        let mut v: [Variable; 64] = [*h, iv].concat().try_into().unwrap();
 
         // Our messages will never exceed one block, so the "final block"
         // flag is always true, and we always invert the bits of v[14].
@@ -410,6 +412,12 @@ impl StandardComposer {
         let ff_var = self.add_input(BlsScalar::from(0xff));
         let ff_vec = [ff_var; 4];
         self.xor(&mut v[56..60], &ff_vec);
+
+        // XOR offset counter t=32 or t=64
+        // t always fits in a single byte for our purposes
+        // so only a single byte of the working vector is changed
+        let t_var = self.add_input(BlsScalar::from(t as u64));
+        self.xor(&mut v[48..49], &[t_var]);
 
         // Ten rounds of mixing for blake2s
         for i in 0..10 {
@@ -433,58 +441,58 @@ impl StandardComposer {
     /// Blake2s with input and output both 256 bits
     pub fn blake2s_256(&mut self, message: [Variable; 32]) -> [Variable; 32] {
         // initialize h
-        let mut h = self.generate_IV();
+        let mut h = self.generate_iv();
+
+        // XOR h[0] with parameter 0x01010000 ^ (kk << 8) ^ nn
+        // key length kk = 0 bytes, input length nn = 32 bytes
+        // 0x01010000 ^ (0x0 << 8) ^ 0x20 = 0x01010020
+        let parameter_vec = vec![self.add_input(BlsScalar::from(32)), self.zero_var, self.add_input(BlsScalar::one()), self.add_input(BlsScalar::one())];
+        self.xor(&mut h[0..4], &parameter_vec);
+
+        // pad the message to 64 bytes
+        let m: [Variable; 64] = [message, [self.zero_var; 32]].concat().try_into().unwrap();
+
+        // h := F( h, d[dd - 1], ll, TRUE )
+        // ll = 32 bytes
+        self.compression(&mut h, m, 32);
+
+        h
+    }
+
+    /// Blake2s with input 512 bits and output 256 bits
+    pub fn blake2s_512(&mut self, message: [Variable; 64]) -> [Variable; 32] {
+        // initialize h
+        let mut h = self.generate_iv();
 
         // XOR h[0] with parameter 0x01010000 ^ (kk << 8) ^ nn
         // kk = 0 bytes, nn = 32 bytes
         // 0x01010000 ^ (0x0 << 8) ^ 0x20 = 0x01010020
         let parameter_vec = vec![self.add_input(BlsScalar::from(32)), self.zero_var, self.add_input(BlsScalar::one()), self.add_input(BlsScalar::one())];
         self.xor(&mut h[0..4], &parameter_vec);
-
-        let m: [Variable; 64] = [message, [self.zero_var; 32]].concat().try_into().unwrap();
-        self.compression(&mut h, m);
+    
+        // h := F( h, d[dd - 1], ll, TRUE )
+        // ll = 64 bytes
+        self.compression(&mut h, message, 64);
 
         h
     }
 
     fn scalar_to_byte_vars(&mut self, scalar: BlsScalar) -> [Variable; 32] {
-        scalar.reduce().0.into_iter()
+        scalar.reduce().0.iter()
             .flat_map(|u| u.to_le_bytes().to_vec())
             .map(|b| self.add_input(BlsScalar::from(b as u64)))
             .collect::<Vec<Variable>>().try_into().unwrap()
     }
 
-    fn blake2s_preimage(&mut self, preimage: BlsScalar, image: BlsScalar) {
+    /// Shows knowledge of a blake2s preimage of a hash
+    fn blake2s_preimage(&mut self, preimage: BlsScalar) -> Variable {
         let message = self.scalar_to_byte_vars(preimage);
-        let hash = self.scalar_to_byte_vars(image);
-        println!("{:?}", image);
         let results = self.blake2s_256(message);
-        let result_var = self.compose_scalar_from_le_bytes(&results);
-        println!("{:?}", self.variables[&result_var]);
-
+        self.compose_scalar_from_le_bytes(&results)
     }
 
-    fn print_vars(&mut self, v: Vec<Variable>) {
-        let mut ints: Vec<BlsScalar> = vec![];
-        let two_pow8 = BlsScalar::from(1<<8);
-        let two_pow16 = BlsScalar::from(1<<16);
-        let two_pow24 = BlsScalar::from(1<<24);
-
-        for i in 0..(v.len() / 4) {
-            ints.push(
-                self.variables[&v[4*i]]
-                +self.variables[&v[4*i+1]]*two_pow8
-                +self.variables[&v[4*i+2]]*two_pow16
-                +self.variables[&v[4*i+3]]*two_pow24
-            );
-        }
-        let int_strings: Vec<String> = ints.iter().map(|i| format!("{:08x}", (u64::from_be_bytes(i.reduce().0[0].to_le_bytes()) >> 32) as u32)).collect();
-        println!("{}", int_strings.join(" "));
-    }
-
-    fn print_var_bytes(&mut self, v: Vec<Variable>) {
-        let bytes = v.iter().map(|b| (self.variables[&b].reduce().0[0] % 256) as u8).collect::<Vec<u8>>();
-        println!("{:02x?}", bytes);
+    fn vars_to_bytes(&mut self, v: Vec<Variable>) -> Vec<u8> {
+        v.iter().map(|b| (self.variables[&b].reduce().0[0] % 256) as u8).collect::<Vec<u8>>()
     }
 }
 
@@ -565,15 +573,17 @@ mod tests {
         use std::convert::TryInto;
         let mut composer = StandardComposer::new();
         let message = BlsScalar::zero();
+
+        // blake2s hash of 256-bits of zeros
         let hash_bytes: [u8; 64] = [
-            0x69, 0x21, 0x7a, 0x30,
-            0x79, 0x90, 0x80, 0x94,
-            0xe1, 0x11, 0x21, 0xd0,
-            0x42, 0x35, 0x4a, 0x7c,
-            0x1f, 0x55, 0xb6, 0x48,
-            0x2c, 0xa1, 0xa5, 0x1e,
-            0x1b, 0x25, 0x0d, 0xfd,
-            0x1e, 0xd0, 0xee, 0xf9,
+            0x32, 0x0b, 0x5e, 0xa9,
+            0x9e, 0x65, 0x3b, 0xc2,
+            0xb5, 0x93, 0xdb, 0x41,
+            0x30, 0xd1, 0x0a, 0x4e,
+            0xfd, 0x3a, 0x0b, 0x4c,
+            0xc2, 0xe1, 0xa6, 0x67,
+            0x2b, 0x67, 0x8d, 0x71,
+            0xdf, 0xbd, 0x33, 0xad,
             0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00,
@@ -583,25 +593,49 @@ mod tests {
             0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00,
         ];
-        let hash = BlsScalar::from_bytes_wide(&hash_bytes);
-        
-        composer.blake2s_preimage(message, hash);
+
+        let hash = composer.add_input(BlsScalar::from_bytes_wide(&hash_bytes));
+        composer.blake2s_preimage(message);
     }
 
     #[test]
-    fn test_endianness() {
+    fn test_blake2s_hash() {
         use std::convert::TryInto;
         let mut composer = StandardComposer::new();
-        let mut test_vector = [composer.zero_var; 64];
-        let test_var = composer.add_input(BlsScalar::from(0x4382d520));
-        let test_var_bytes = composer.decompose_word_into_le_bytes(test_var);
-        for i in 0..4 {
-            test_vector[i] = test_var_bytes[i];
+
+        // 256 bits of zeros
+        let message_bytes = [
+            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+        ];
+
+        // blake2s hash of 256-bits of zeros
+        let hash_bytes: [u8; 32] = [
+            0x32, 0x0b, 0x5e, 0xa9,
+            0x9e, 0x65, 0x3b, 0xc2,
+            0xb5, 0x93, 0xdb, 0x41,
+            0x30, 0xd1, 0x0a, 0x4e,
+            0xfd, 0x3a, 0x0b, 0x4c,
+            0xc2, 0xe1, 0xa6, 0x67,
+            0x2b, 0x67, 0x8d, 0x71,
+            0xdf, 0xbd, 0x33, 0xad,
+        ];
+            
+        let mut message_vars = [composer.zero_var; 32];
+        for i in 0..32 {
+            message_vars[i] = composer.add_input(BlsScalar::from(message_bytes[i] as u64));
         }
-        composer.print_var_bytes(test_vector.to_vec());
 
+        let hash_vars = composer.blake2s_256(message_vars);
 
-        composer.rotate_7(&mut test_vector, 0);
-        composer.print_var_bytes(test_vector.to_vec());
+        for i in 0..32 {
+            assert_eq!(composer.vars_to_bytes(hash_vars.to_vec())[i], hash_bytes[i]);
+        }
     }
 }
