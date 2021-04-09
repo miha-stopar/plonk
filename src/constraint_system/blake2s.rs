@@ -14,31 +14,47 @@ use std::io::Write;
 use std::convert::TryInto;
 
 impl StandardComposer {
-    /// Generates an XOR truth table out of 4-bit nibbles
-    pub fn generate_xor_table_small(&mut self) {
-        for i in 0..2u8.pow(4) {
-            for j in 0..2u8.pow(4) {
+
+    /// Generates plookup table with byte-wise XOR table,
+    /// 4-bit range table, 7-bit range table, and 2-bit range table
+    pub fn generate_blake_table(&mut self) {
+        // 2^16 row byte-wise XOR table
+        for i in 0..2u16.pow(8) {
+            for j in 0..2u16.pow(8) {
                 self.lookup_table.0.push([
                     BlsScalar::from(i as u64),
                     BlsScalar::from(j as u64),
                     BlsScalar::from((i^j) as u64),
-                    BlsScalar::zero(),
+                    BlsScalar::one(),
                 ]);
             }
         }
-    }
-
-    /// Generates an XOR truth table out of bytes
-    pub fn generate_xor_table_big(&mut self) {
-        for i in 0..2u8.pow(8) {
-            for j in 0..2u8.pow(8) {
-                self.lookup_table.0.push([
-                    BlsScalar::from(i as u64),
-                    BlsScalar::from(j as u64),
-                    BlsScalar::from((i^j) as u64),
-                    BlsScalar::zero(),
-                ]);
-            }
+        // 2^4 row 4-bit range table
+        for i in 0..2u16.pow(4) {
+            self.lookup_table.0.push([
+                BlsScalar::from(i as u64),
+                BlsScalar::zero(),
+                BlsScalar::zero(),
+                BlsScalar::from(2),
+            ]);
+        }
+        // 2^7 row 7-bit range table
+        for i in 0..2u16.pow(7) {
+            self.lookup_table.0.push([
+                BlsScalar::from(i as u64),
+                BlsScalar::zero(),
+                BlsScalar::zero(),
+                BlsScalar::from(3),
+            ]);
+        }
+        // 2^2 row 2-bit range table
+        for i in 0..2u16.pow(2) {
+            self.lookup_table.0.push([
+                BlsScalar::from(i as u64),
+                BlsScalar::zero(),
+                BlsScalar::zero(),
+                BlsScalar::from(4),
+            ]);
         }
     }
 
@@ -47,11 +63,13 @@ impl StandardComposer {
         // Checks if bytes.len() is a power of two
         assert_eq!(bytes.len(), 32);
 
+        // compose 32-bit words from 4 range-checked bytes
         let mut words = [self.zero_var; 8];
         for i in 0..8 {
             words[i] = self.compose_word_from_le_bytes(&bytes[4*i..4*(i+1)]);
         }
 
+        // compose 8-byte octs
         let mut octs = [self.zero_var; 4];
         for i in 0..4 {
             octs[i] = self.add(
@@ -61,10 +79,11 @@ impl StandardComposer {
                 BlsScalar::zero(),
             );
         }
-        
-        let mut hexs = [self.zero_var; 2];
+
+        // compose 16-byte hexes
+        let mut hexes = [self.zero_var; 2];
         for i in 0..2 {
-            hexs[i] = self.add(
+            hexes[i] = self.add(
                 (BlsScalar::from_raw([0,1,0,0]), octs[2*i+1]),
                 (BlsScalar::one(), octs[2*i]),
                 BlsScalar::zero(),
@@ -72,9 +91,10 @@ impl StandardComposer {
             );
         }
 
+        // compose 32-byte/256-bit scalar
         self.add(
-            (BlsScalar::from_raw([0,0,1,0]), hexs[1]),
-            (BlsScalar::one(), hexs[0]),
+            (BlsScalar::from_raw([0,0,1,0]), hexes[1]),
+            (BlsScalar::one(), hexes[0]),
             BlsScalar::zero(),
             BlsScalar::zero(),
         )
@@ -85,9 +105,31 @@ impl StandardComposer {
     /// x0|x1|x2|x3. 
     pub fn compose_word_from_le_bytes(&mut self, bytes: &[Variable]) -> Variable {
         assert_eq!(bytes.len(), 4);
+
+        // Prove 4 pieces of word are actually bytes by looking them up in the byte-sized lookup table
+        // If (A, B, A^B) is in the lookup table, then A and B are both less than 2^8
+        // Uses 2 lookup gates to replace 8 gates used for a 8-bit range check
+
+        let byte_3_xor_byte_2_var = self.add_input(
+            BlsScalar::from(
+                self.variables[&bytes[3]].reduce().0[0] ^ self.variables[&bytes[2]].reduce().0[0]
+            )
+        );
+
+        let byte_1_xor_byte_0_var = self.add_input(
+            BlsScalar::from(
+                self.variables[&bytes[1]].reduce().0[0] ^ self.variables[&bytes[0]].reduce().0[0]
+            )
+        );
+
+        // use the bytewise XOR table to show that all bytes are truly < 2^8
+        let one_var = self.add_input(BlsScalar::one());
+        self.plookup_gate(bytes[3], bytes[2], byte_3_xor_byte_2_var, Some(one_var), BlsScalar::zero());
+        self.plookup_gate(bytes[1], bytes[0], byte_1_xor_byte_0_var, Some(one_var), BlsScalar::zero()); 
+
         let pair_hi = self.add(
-            (BlsScalar::from(1 << 24), bytes[3]),
-            (BlsScalar::from(1 << 16), bytes[2]),
+            (BlsScalar::from(1 << 8), bytes[3]),
+            (BlsScalar::one(), bytes[2]),
             BlsScalar::zero(),
             BlsScalar::zero(),
         );
@@ -100,7 +142,7 @@ impl StandardComposer {
         );
 
         self.add(
-            (BlsScalar::one(), pair_hi),
+            (BlsScalar::from(1 << 16), pair_hi),
             (BlsScalar::one(), pair_lo),
             BlsScalar::zero(),
             BlsScalar::zero(),
@@ -115,6 +157,15 @@ impl StandardComposer {
         // Compute quotient and add as variable
         let quotient = dividend / 2_u64.pow(32);
         let quotient_var = self.add_input(BlsScalar::from(quotient));
+
+        // dividend = quotient * 2^32 + remainder
+        // each dividend comes from the sum of two or three
+        // u32 words, so the quotient should be less than 4 (2 bits)
+
+        // use the fourth partition of the table to show the quotient
+        // is less than 4
+        let four_var = self.add_input(BlsScalar::from(4));
+        self.plookup_gate(quotient_var, self.zero_var, self.zero_var, Some(four_var), BlsScalar::zero());
 
         // Show mod has been done correctly with a single add gate
         // which returns the variable holding the remainder
@@ -143,7 +194,7 @@ impl StandardComposer {
 
         word_vars
     }
-    
+
     /// Adds three variables by adding byte-by-byte, composing the bytes, and modding
     /// by 2**32
     pub fn add_three_mod_2_32(&mut self, v: &mut [Variable; 64], a: usize, b: usize, x: &[Variable]) {
@@ -243,6 +294,11 @@ impl StandardComposer {
             let lo = current_byte % (1 << 4);
             nibbles[2*i] = self.add_input(BlsScalar::from(hi));
             nibbles[2*i+1] = self.add_input(BlsScalar::from(lo));
+
+            // here we use the second parition of the table as a range check that verifies that both nibbles are indeed less than 2^4
+            let two_var = self.add_input(BlsScalar::from(2));
+            self.plookup_gate(nibbles[2*i], self.zero_var, self.zero_var, Some(two_var), BlsScalar::zero());
+            self.plookup_gate(nibbles[2*i+1], self.zero_var, self.zero_var, Some(two_var), BlsScalar::zero());
         }
 
         // now recompose the 8 nibbles into 4 bytes, shifting the nibbles
@@ -273,11 +329,20 @@ impl StandardComposer {
             // high bits are on even indices, low bits are on odd indices
             split_bytes[2*i] = self.add_input(BlsScalar::from(hi));
             split_bytes[2*i+1] = self.add_input(BlsScalar::from(lo));
+
+            // here we use the third parition of the table as a range check that verifies that the low bits are indeed less than 2^7
+            let three_var = self.add_input(BlsScalar::from(3));
+            self.plookup_gate(split_bytes[2*i+1], self.zero_var, self.zero_var, Some(three_var), BlsScalar::zero());
+
+            // finally, show the high bit is actually a bit
+            self.boolean_gate(split_bytes[2*i]);
         }
 
-        // now recompose the 4 pairs of high and low bits into 4 bytes, shifting 
+        // Now recompose the 4 pairs of high and low bits into 4 bytes, shifting 
         // shifting 1 space to the right, so that the new first byte is lo|hi, 
-        // using the low bits at index 3 and the high bit at index 0
+        // using the low bits at index 3 and the high bit at index 0.
+        // We do not need to range check the resulting byte since we already
+        // checked the two pieces of each byte
         for i in 0..4 {
             v[4*n+i] =  self.add(
                 // 7 low bits become new high bits
@@ -317,51 +382,66 @@ impl StandardComposer {
             let left_val = self.variables[&left[i]].reduce().0[0];
             let right_val = self.variables[&right[i]].reduce().0[0];
             let out_var = self.add_input(BlsScalar::from(left_val ^ right_val));
-            left[i] = self.plookup_gate(left[i], right[i], out_var, None, BlsScalar::zero());
+            let one_var = self.add_input(BlsScalar::one());
+            left[i] = self.plookup_gate(left[i], right[i], out_var, Some(one_var), BlsScalar::zero());
         }
     }
+
+        /// Performs an XOR in place, mutating the left word
+        pub fn xor_debug(&mut self, left: &mut [Variable], right: &[Variable]) {
+            // left := left ^ right
+            for i in 0..left.len() {
+                let left_val = self.variables[&left[i]].reduce().0[0];
+                let right_val = self.variables[&right[i]].reduce().0[0];
+                let out_var = self.add_input(BlsScalar::from(left_val ^ right_val));
+                let one_var = self.add_input(BlsScalar::one());
+                left[i] = self.plookup_gate(left[i], right[i], out_var, Some(one_var), BlsScalar::zero());
+            }
+        }
+    
 
     /// This function mixes two input words, "x" and "y", into
     /// four words indexed by "a", "b", "c", and "d" selected 
     /// from the working vector v. The 32-bit words in v have
     /// been decomposed into 4 bytes.
     fn mixing (&mut self, v: &mut [Variable; 64], a: usize, b: usize, c: usize, d: usize, x: &[Variable], y: &[Variable]) {
-
+        println!("begin {:?}", self.circuit_size());
         // line 1: 15 gates
         // v[a] := (v[a] + v[b] + x) mod 2**32
         self.add_three_mod_2_32(v, a, b, x);
-
+        println!("line 1 {:?}", self.circuit_size());
         // line 2: 4 gates
         // v[d] := (v[d] ^ v[a]) >>> 16
         self.xor_by_indices(v, d, a);
         self.rotate(v, d, 16);
-
+        println!("line 2 {:?}", self.circuit_size());
         // line 3: 11 gates
         // v[c] := (v[c] + v[d]) mod 2**32
         self.add_two_mod_2_32(v, c, d);
-
+        println!("line 3 {:?}", self.circuit_size());
         // line 4: 8 gates
         // v[b] := (v[b] ^ v[c]) >>> 12 
         self.xor_by_indices(v, b, c);
         self.rotate(v, b, 12);
-
+        println!("line 4 {:?}", self.circuit_size());
         // line 5: 15 gates
         // v[a] := (v[a] + v[b] + y) mod 2**32
         self.add_three_mod_2_32(v, a, b, y);
-
+        println!("line 5 {:?}", self.circuit_size());
         // line 6: 4 gates
         // v[d] := (v[d] ^ v[a]) >>> 8
         self.xor_by_indices(v, d, a);
         self.rotate(v, d, 8);
-
+        println!("line 6 {:?}", self.circuit_size());
         // line 7: 11 gates
         // v[c] := (v[c] + v[d]) mod 2**32
         self.add_two_mod_2_32(v, c, d);
-
+        println!("line 7 {:?}", self.circuit_size());
         // line 8: 8 gates
         // v[b] := (v[b] ^ v[c]) >>> 7 
         self.xor_by_indices(v, b, c);
         self.rotate(v, b, 7);
+        println!("line 8 {:?}", self.circuit_size());
     }
 
     /// Generate initial values from fractional part of the square root
@@ -411,12 +491,14 @@ impl StandardComposer {
         // by XORing with [0xFF, 0xFF, 0xFF, 0xFF]
         let ff_var = self.add_input(BlsScalar::from(0xff));
         let ff_vec = [ff_var; 4];
+        println!("flip all bits");
         self.xor(&mut v[56..60], &ff_vec);
 
         // XOR offset counter t=32 or t=64
         // t always fits in a single byte for our purposes
         // so only a single byte of the working vector is changed
         let t_var = self.add_input(BlsScalar::from(t as u64));
+        println!("xor offset counter");
         self.xor(&mut v[48..49], &[t_var]);
 
         // Ten rounds of mixing for blake2s
@@ -434,7 +516,8 @@ impl StandardComposer {
 
         for i in 0..8 {
             self.xor_by_indices(&mut v, i, i+8);
-            self.xor(&mut h[4*i..4*(i+1)], &v[4*i..4*(i+1)]);
+            println!("xor in state");
+            self.xor_debug(&mut h[4*i..4*(i+1)], &v[4*i..4*(i+1)]);
         }
     }
 
@@ -447,6 +530,7 @@ impl StandardComposer {
         // key length kk = 0 bytes, input length nn = 32 bytes
         // 0x01010000 ^ (0x0 << 8) ^ 0x20 = 0x01010020
         let parameter_vec = vec![self.add_input(BlsScalar::from(32)), self.zero_var, self.add_input(BlsScalar::one()), self.add_input(BlsScalar::one())];
+        println!("parameter");
         self.xor(&mut h[0..4], &parameter_vec);
 
         // pad the message to 64 bytes
@@ -468,6 +552,7 @@ impl StandardComposer {
         // kk = 0 bytes, nn = 32 bytes
         // 0x01010000 ^ (0x0 << 8) ^ 0x20 = 0x01010020
         let parameter_vec = vec![self.add_input(BlsScalar::from(32)), self.zero_var, self.add_input(BlsScalar::one()), self.add_input(BlsScalar::one())];
+        println!("parameter");
         self.xor(&mut h[0..4], &parameter_vec);
     
         // h := F( h, d[dd - 1], ll, TRUE )
@@ -569,33 +654,43 @@ mod tests {
         }
 
     #[test]
-    fn test_blake2s_preimage() {
+    fn test_blake2s_preimage_proof() {
         use std::convert::TryInto;
-        let mut composer = StandardComposer::new();
-        let message = BlsScalar::zero();
+        use super::super::helper::*;
 
-        // blake2s hash of 256-bits of zeros
-        let hash_bytes: [u8; 64] = [
-            0x32, 0x0b, 0x5e, 0xa9,
-            0x9e, 0x65, 0x3b, 0xc2,
-            0xb5, 0x93, 0xdb, 0x41,
-            0x30, 0xd1, 0x0a, 0x4e,
-            0xfd, 0x3a, 0x0b, 0x4c,
-            0xc2, 0xe1, 0xa6, 0x67,
-            0x2b, 0x67, 0x8d, 0x71,
-            0xdf, 0xbd, 0x33, 0xad,
-            0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00,
-        ];
+        let res = gadget_tester(
+            |composer| {
+                // prover's secret preimage
+                let preimage = BlsScalar::zero();
 
-        let hash = composer.add_input(BlsScalar::from_bytes_wide(&hash_bytes));
-        composer.blake2s_preimage(message);
+                // blake2s hash of 256-bits of zeros
+                let hash_bytes: [u8; 64] = [
+                    0x32, 0x0b, 0x5e, 0xa9,
+                    0x9e, 0x65, 0x3b, 0xc2,
+                    0xb5, 0x93, 0xdb, 0x41,
+                    0x30, 0xd1, 0x0a, 0x4e,
+                    0xfd, 0x3a, 0x0b, 0x4c,
+                    0xc2, 0xe1, 0xa6, 0x67,
+                    0x2b, 0x67, 0x8d, 0x71,
+                    0xdf, 0xbd, 0x33, 0xad,
+                    0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00,
+                ];
+
+                composer.generate_xor_table_big();
+                let hash = composer.add_input(BlsScalar::from_bytes_wide(&hash_bytes));
+                composer.blake2s_preimage(preimage);
+            },
+            131072,
+        );
+
+        assert!(res.is_ok());
     }
 
     #[test]
@@ -604,7 +699,7 @@ mod tests {
         let mut composer = StandardComposer::new();
 
         // 256 bits of zeros
-        let message_bytes = [
+        let message_bytes: [u8; 32] = [
             0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00,
@@ -637,5 +732,6 @@ mod tests {
         for i in 0..32 {
             assert_eq!(composer.vars_to_bytes(hash_vars.to_vec())[i], hash_bytes[i]);
         }
+        println!("gates: {:?}", composer.circuit_size());
     }
 }
