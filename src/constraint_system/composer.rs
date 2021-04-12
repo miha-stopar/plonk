@@ -492,15 +492,14 @@ mod tests {
     fn xor_plookup() {
         let res = gadget_tester(
             |composer| {
-
                 use rand::Rng;
-                let mut rng = rand::thread_rng();     
+                let mut rng = rand::thread_rng();
 
                 fn to_le_nibbles(input: u32) -> [u8; 8] {
                     let mut inp = input;
                     let mut nibbles: [u8; 8] = [0; 8];
                     for i in 0..8 {
-                        nibbles[i] = ((inp >> (28-4*i)) % 16) as u8;
+                        nibbles[i] = ((inp >> (28 - 4 * i)) % 16) as u8;
                     }
                     nibbles
                 }
@@ -511,7 +510,7 @@ mod tests {
                         composer.lookup_table.0.push([
                             BlsScalar::from(i as u64),
                             BlsScalar::from(j as u64),
-                            BlsScalar::from((i^j) as u64),
+                            BlsScalar::from((i ^ j) as u64),
                             BlsScalar::zero(),
                         ]);
                     }
@@ -528,27 +527,77 @@ mod tests {
                 let m3_nibbles = to_le_nibbles(m3);
 
                 // add each nibble as a variable to the composer
-                let m1_nibble_var: Vec<Variable> = m1_nibbles.iter().map(|b| composer.add_input(BlsScalar::from(*b as u64))).collect();
-                let m2_nibble_var: Vec<Variable> = m2_nibbles.iter().map(|b| composer.add_input(BlsScalar::from(*b as u64))).collect();
-                let m3_nibble_var: Vec<Variable> = m3_nibbles.iter().map(|b| composer.add_input(BlsScalar::from(*b as u64))).collect();
+                let m1_nibble_var: Vec<Variable> = m1_nibbles
+                    .iter()
+                    .map(|b| composer.add_input(BlsScalar::from(*b as u64)))
+                    .collect();
+                let m2_nibble_var: Vec<Variable> = m2_nibbles
+                    .iter()
+                    .map(|b| composer.add_input(BlsScalar::from(*b as u64)))
+                    .collect();
+                let m3_nibble_var: Vec<Variable> = m3_nibbles
+                    .iter()
+                    .map(|b| composer.add_input(BlsScalar::from(*b as u64)))
+                    .collect();
 
                 // add plookup XOR gate for each nibble and compute output (outght to be identical to m3 nibbles)
                 let mut xor_out_var: Vec<Variable> = vec![];
 
                 for i in 0..8 {
-                    xor_out_var.push(composer.plookup_gate(m1_nibble_var[i], m2_nibble_var[i], m3_nibble_var[i], None, BlsScalar::zero()));
-                };
+                    xor_out_var.push(composer.plookup_gate(
+                        m1_nibble_var[i],
+                        m2_nibble_var[i],
+                        m3_nibble_var[i],
+                        None,
+                        BlsScalar::zero(),
+                    ));
+                }
 
                 // recompose XOR output nibbles to show equality with m3
-                let pair01 = composer.add((BlsScalar::from(1<<4), xor_out_var[0]), (BlsScalar::one(), xor_out_var[1]), BlsScalar::zero(), BlsScalar::zero());
-                let pair23 = composer.add((BlsScalar::from(1<<4), xor_out_var[2]), (BlsScalar::one(), xor_out_var[3]), BlsScalar::zero(), BlsScalar::zero());
-                let pair45 = composer.add((BlsScalar::from(1<<4), xor_out_var[4]), (BlsScalar::one(), xor_out_var[5]), BlsScalar::zero(), BlsScalar::zero());
-                let pair67 = composer.add((BlsScalar::from(1<<4), xor_out_var[6]), (BlsScalar::one(), xor_out_var[7]), BlsScalar::zero(), BlsScalar::zero());
+                let pair01 = composer.add(
+                    (BlsScalar::from(1 << 4), xor_out_var[0]),
+                    (BlsScalar::one(), xor_out_var[1]),
+                    BlsScalar::zero(),
+                    BlsScalar::zero(),
+                );
+                let pair23 = composer.add(
+                    (BlsScalar::from(1 << 4), xor_out_var[2]),
+                    (BlsScalar::one(), xor_out_var[3]),
+                    BlsScalar::zero(),
+                    BlsScalar::zero(),
+                );
+                let pair45 = composer.add(
+                    (BlsScalar::from(1 << 4), xor_out_var[4]),
+                    (BlsScalar::one(), xor_out_var[5]),
+                    BlsScalar::zero(),
+                    BlsScalar::zero(),
+                );
+                let pair67 = composer.add(
+                    (BlsScalar::from(1 << 4), xor_out_var[6]),
+                    (BlsScalar::one(), xor_out_var[7]),
+                    BlsScalar::zero(),
+                    BlsScalar::zero(),
+                );
 
-                let pair0123 = composer.add((BlsScalar::from(1<<8), pair01), (BlsScalar::one(), pair23), BlsScalar::zero(), BlsScalar::zero());
-                let pair4567 = composer.add((BlsScalar::from(1<<8), pair45), (BlsScalar::one(), pair67), BlsScalar::zero(), BlsScalar::zero());
+                let pair0123 = composer.add(
+                    (BlsScalar::from(1 << 8), pair01),
+                    (BlsScalar::one(), pair23),
+                    BlsScalar::zero(),
+                    BlsScalar::zero(),
+                );
+                let pair4567 = composer.add(
+                    (BlsScalar::from(1 << 8), pair45),
+                    (BlsScalar::one(), pair67),
+                    BlsScalar::zero(),
+                    BlsScalar::zero(),
+                );
 
-                let result = composer.add((BlsScalar::from(1<<16), pair0123), (BlsScalar::one(), pair4567), BlsScalar::zero(), BlsScalar::zero());
+                let result = composer.add(
+                    (BlsScalar::from(1 << 16), pair0123),
+                    (BlsScalar::one(), pair4567),
+                    BlsScalar::zero(),
+                    BlsScalar::zero(),
+                );
             },
             512,
         );
@@ -755,6 +804,6 @@ mod tests {
             4096,
         );
 
-    assert!(res.is_ok());
+        assert!(res.is_ok());
     }
 }

@@ -65,7 +65,9 @@ pub(crate) fn gadget_tester(
         gadget(&mut prover.mut_cs());
 
         // Commit Key
-        let (ck, _) = public_parameters.trim(2 * prover.cs.total_size().next_power_of_two()).unwrap();
+        let (ck, _) = public_parameters
+            .trim(2 * prover.cs.total_size().next_power_of_two())
+            .unwrap();
 
         // Preprocess circuit
         prover.preprocess(&ck).unwrap();
@@ -90,7 +92,9 @@ pub(crate) fn gadget_tester(
     gadget(&mut verifier.mut_cs());
 
     // Compute Commit and Verifier Key
-    let (ck, vk) = public_parameters.trim(verifier.cs.total_size().next_power_of_two()).unwrap();
+    let (ck, vk) = public_parameters
+        .trim(verifier.cs.total_size().next_power_of_two())
+        .unwrap();
 
     // Preprocess circuit
     verifier.preprocess(&ck).unwrap();

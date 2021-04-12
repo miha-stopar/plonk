@@ -14,6 +14,8 @@ pub(crate) mod variable;
 
 /// Simple Arithmetic gates
 pub mod arithmetic;
+/// Blake2s hash widget
+pub mod blake2s;
 /// Boolean gate
 pub mod boolean;
 /// Elliptic Curve Crypto gates
@@ -24,8 +26,6 @@ pub(crate) mod helper;
 pub mod logic;
 /// Range gate
 pub mod range;
-/// Blake2s hash widget
-pub mod blake2s;
 
 pub use composer::StandardComposer;
 pub use variable::{Variable, WireData};
