@@ -762,6 +762,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_blake2s_preimage_proof() {
         use super::super::helper::*;
         use std::convert::TryInto;
