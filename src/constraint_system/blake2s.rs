@@ -450,43 +450,42 @@ impl StandardComposer {
         x: &[Variable],
         y: &[Variable],
     ) {
-        println!("begin {:?}", self.circuit_size());
+
         // line 1: 15 gates
         // v[a] := (v[a] + v[b] + x) mod 2**32
         self.add_three_mod_2_32(v, a, b, x);
-        println!("line 1 {:?}", self.circuit_size());
+
         // line 2: 4 gates
         // v[d] := (v[d] ^ v[a]) >>> 16
         self.xor_by_indices(v, d, a);
         self.rotate(v, d, 16);
-        println!("line 2 {:?}", self.circuit_size());
+
         // line 3: 11 gates
         // v[c] := (v[c] + v[d]) mod 2**32
         self.add_two_mod_2_32(v, c, d);
-        println!("line 3 {:?}", self.circuit_size());
+
         // line 4: 8 gates
         // v[b] := (v[b] ^ v[c]) >>> 12
         self.xor_by_indices(v, b, c);
         self.rotate(v, b, 12);
-        println!("line 4 {:?}", self.circuit_size());
+
         // line 5: 15 gates
         // v[a] := (v[a] + v[b] + y) mod 2**32
         self.add_three_mod_2_32(v, a, b, y);
-        println!("line 5 {:?}", self.circuit_size());
+
         // line 6: 4 gates
         // v[d] := (v[d] ^ v[a]) >>> 8
         self.xor_by_indices(v, d, a);
         self.rotate(v, d, 8);
-        println!("line 6 {:?}", self.circuit_size());
+
         // line 7: 11 gates
         // v[c] := (v[c] + v[d]) mod 2**32
         self.add_two_mod_2_32(v, c, d);
-        println!("line 7 {:?}", self.circuit_size());
+        
         // line 8: 8 gates
         // v[b] := (v[b] ^ v[c]) >>> 7
         self.xor_by_indices(v, b, c);
         self.rotate(v, b, 7);
-        println!("line 8 {:?}", self.circuit_size());
     }
 
     /// Generate initial values from fractional part of the square root
@@ -532,14 +531,12 @@ impl StandardComposer {
         // by XORing with [0xFF, 0xFF, 0xFF, 0xFF]
         let ff_var = self.add_input(BlsScalar::from(0xff));
         let ff_vec = [ff_var; 4];
-        println!("flip all bits");
         self.xor(&mut v[56..60], &ff_vec);
 
         // XOR offset counter t=32 or t=64
         // t always fits in a single byte for our purposes
         // so only a single byte of the working vector is changed
         let t_var = self.add_input(BlsScalar::from(t as u64));
-        println!("xor offset counter");
         self.xor(&mut v[48..49], &[t_var]);
 
         // Ten rounds of mixing for blake2s
@@ -621,7 +618,6 @@ impl StandardComposer {
 
         for i in 0..8 {
             self.xor_by_indices(&mut v, i, i + 8);
-            println!("xor in state");
             self.xor_debug(&mut h[4 * i..4 * (i + 1)], &v[4 * i..4 * (i + 1)]);
         }
     }
@@ -640,7 +636,6 @@ impl StandardComposer {
             self.add_input(BlsScalar::one()),
             self.add_input(BlsScalar::one()),
         ];
-        println!("parameter");
         self.xor(&mut h[0..4], &parameter_vec);
 
         // pad the message to 64 bytes
@@ -667,7 +662,6 @@ impl StandardComposer {
             self.add_input(BlsScalar::one()),
             self.add_input(BlsScalar::one()),
         ];
-        println!("parameter");
         self.xor(&mut h[0..4], &parameter_vec);
 
         // h := F( h, d[dd - 1], ll, TRUE )
