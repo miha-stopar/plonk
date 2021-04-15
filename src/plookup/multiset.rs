@@ -81,11 +81,11 @@ impl MultiSet {
         let mut s = self.clone();
         s.0.reserve(f.0.len());
         for element in f.0.iter() {
-            println!("element {:?}", element);
             let index = s
                 .position(element)
                 .ok_or(PlookupErrors::ElementNotIndexed)?;
             s.0.insert(index, *element);
+            println!("element {:?} {:?}", index, element);
         }
 
         Ok(s)

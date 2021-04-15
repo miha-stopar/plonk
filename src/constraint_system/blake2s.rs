@@ -481,7 +481,7 @@ impl StandardComposer {
         // line 7: 11 gates
         // v[c] := (v[c] + v[d]) mod 2**32
         self.add_two_mod_2_32(v, c, d);
-        
+
         // line 8: 8 gates
         // v[b] := (v[b] ^ v[c]) >>> 7
         self.xor_by_indices(v, b, c);
@@ -702,6 +702,8 @@ mod tests {
     use crate::constraint_system::Variable;
     use crate::prelude::StandardComposer;
     use dusk_bls12_381::BlsScalar;
+    use crate::plookup::PreprocessedTable4Arity;
+    use crate::proof_system::{Prover, Verifier};
 
     #[test]
     fn test_mixer() {
@@ -757,12 +759,41 @@ mod tests {
 
     #[test]
     #[ignore]
+    fn create_blake2s_setup() {
+        use super::super::helper::*;
+        use std::convert::TryInto;
+        use crate::commitment_scheme::kzg10::PublicParameters;
+        use std::fs::File;
+        use std::io::Write;
+        
+        let public_parameters = PublicParameters::setup(2usize.pow(17), &mut rand::thread_rng()).unwrap();
+        let mut file = File::create("blake2s_setup").unwrap();
+        file.write_all(&public_parameters.to_raw_bytes()).unwrap();
+    }
+
+    #[test]
     fn test_blake2s_preimage_proof() {
         use super::super::helper::*;
         use std::convert::TryInto;
+        use crate::commitment_scheme::kzg10::PublicParameters;
+        use std::fs::File;
+        use std::io;
+        use std::io::prelude::*;
 
-        let res = gadget_tester(
-            |composer| {
+        unsafe {
+            let mut file = File::open("blake2s_setup").unwrap();
+            let mut buffer = Vec::new();
+            file.read_to_end(&mut buffer).unwrap();
+
+            let public_parameters = PublicParameters::from_slice_unchecked(&buffer).unwrap();
+
+            let (proof, public_inputs, lookup_table) = {
+                // Create a prover struct
+                let mut prover = Prover::new(b"blake2s");
+        
+                // Additionally key the transcript
+                prover.key_transcript(b"key", b"additional seed information");
+        
                 // prover's secret preimage
                 let preimage = BlsScalar::zero();
 
@@ -774,15 +805,54 @@ mod tests {
                     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                 ];
+                println!("loaded setup");
+                prover.cs.generate_blake_table();
+                println!("table generated");
+                let hash = prover.cs.add_input(BlsScalar::from_bytes_wide(&hash_bytes));
+                prover.cs.blake2s_preimage(preimage);
+                println!("circuit created");
+                // Commit Key
+                let (ck, _) = public_parameters
+                    .trim(prover.cs.total_size().next_power_of_two())
+                    .unwrap();
+                println!("trimmed");
+                // Preprocess circuit
+                prover.preprocess(&ck).unwrap();
+        
+                // Once the prove method is called, the public inputs are cleared
+                // So pre-fetch these before calling Prove
+                let public_inputs = prover.cs.public_inputs.clone();
+                let lookup_table = prover.cs.lookup_table.clone();
+                println!("proover preprocess");
+                // Compute Proof
+                (prover.prove(&ck).unwrap(), public_inputs, lookup_table)
+            };
 
-                composer.generate_blake_table();
-                let hash = composer.add_input(BlsScalar::from_bytes_wide(&hash_bytes));
-                composer.blake2s_preimage(preimage);
-            },
-            131072,
-        );
+                // Verifiers view
+                //
+                // Create a Verifier object
+                let mut verifier = Verifier::new(b"blake2s");
 
-        assert!(res.is_ok());
+                // Additionally key the transcript
+                verifier.key_transcript(b"key", b"additional seed information");
+
+                // Add circuit to verifier's composer
+                verifier.cs.blake2s_preimage(BlsScalar::zero());
+
+                // Compute Commit and Verifier Key
+                let (ck, vk) = public_parameters
+                    .trim(verifier.cs.total_size().next_power_of_two())
+                    .unwrap();
+
+                // Preprocess circuit
+                verifier.preprocess(&ck).unwrap();
+
+                // Verify proof
+                let res = verifier.verify(&proof, &vk, &public_inputs, &lookup_table);
+
+                assert!(res.is_ok());
+        }
+
     }
 
     #[test]

@@ -355,7 +355,7 @@ impl StandardComposer {
             out_sigma: out_sigma_poly,
             fourth_sigma: fourth_sigma_poly,
         };
-
+        
         // Add the circuit description to the transcript
         verifier_key.seed_transcript(transcript);
 

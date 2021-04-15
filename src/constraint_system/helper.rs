@@ -66,7 +66,7 @@ pub(crate) fn gadget_tester(
 
         // Commit Key
         let (ck, _) = public_parameters
-            .trim(2 * prover.cs.total_size().next_power_of_two())
+            .trim(prover.cs.total_size().next_power_of_two())
             .unwrap();
 
         // Preprocess circuit

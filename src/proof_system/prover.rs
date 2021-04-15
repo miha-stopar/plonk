@@ -101,7 +101,7 @@ impl Prover {
     ) -> Result<Proof, Error> {
         // make sure the domain is big enough to handle the circuit as well as the lookup table
         let domain = EvaluationDomain::new(self.cs.total_size())?;
-
+        println!("begin proving");
         // Since the caller is passing a pre-processed circuit
         // We assume that the Transcript has been seeded with the preprocessed
         // Commitments
@@ -142,6 +142,7 @@ impl Prover {
         // Generate table compression factor
         let zeta = transcript.challenge_scalar(b"zeta");
 
+        println!("wire commitments finished");
         // Compress table into vector of single elements
         let mut compressed_t: Vec<BlsScalar> = self
             .cs
@@ -150,11 +151,11 @@ impl Prover {
             .iter()
             .map(|arr| arr[0] + arr[1] * zeta + arr[2] * zeta * zeta + arr[3] * zeta * zeta * zeta)
             .collect();
-
+        println!("table compressed");
         // Sort table so we can be sure to choose an element that is not the highest or lowest
         compressed_t.sort();
         let second_element = compressed_t[1];
-
+        println!("table sorted 1");
         // Pad the table to the correct size with an element that is not the highest or lowest
         let pad = vec![second_element; domain.size() - compressed_t.len()];
         compressed_t.extend(pad);
@@ -162,13 +163,13 @@ impl Prover {
         // Sort again to return t to sorted state
         // There may be a better way of inserting the padding so the sort does not need to happen twice
         compressed_t.sort();
-
+        println!("table sorted 2");
         let compressed_t_multiset = MultiSet(compressed_t);
 
         // Compute table poly
         let table_poly =
             Polynomial::from_coefficients_vec(domain.ifft(&compressed_t_multiset.0.as_slice()));
-
+        println!("table_poly computed");
         // Compute table f
         // When q_lookup[i] is zero the wire value is replaced with a dummy value
         // Currently set as the first row of the public table
@@ -205,7 +206,7 @@ impl Prover {
             ],
             zeta,
         );
-
+        println!("queries compressed 1");
         // Short version skips the first element and is used in plookup permutation checks. Ought to be length n-1.
         let compressed_f_short = MultiSet::compress_four_arity(
             [
@@ -216,7 +217,10 @@ impl Prover {
             ],
             zeta,
         );
-
+        println!("queries compressed 2");
+        println!("compressed trouble element 70277: {:?}", compressed_f_short.0[70277]);
+        println!("original values: {:?} {:?} {:?} {:?}", f_1_scalar[70278], f_2_scalar[70278], f_3_scalar[70278], f_4_scalar[70278]);
+        println!("double check compression {:?}", f_1_scalar[70278] + f_2_scalar[70278]*zeta + f_3_scalar[70278]*zeta*zeta + f_4_scalar[70278]*zeta*zeta*zeta);
         // Compute long query poly
         let f_poly_long =
             Polynomial::from_coefficients_vec(domain.ifft(&compressed_f_long.0.as_slice()));
@@ -253,7 +257,7 @@ impl Prover {
                 &prover_key.permutation.fourth_sigma.0,
             ),
         ));
-
+        println!("z poly computed");
         // Commit to permutation polynomial
         //
         let z_poly_commit = commit_key.commit(&z_poly)?;
@@ -298,7 +302,7 @@ impl Prover {
                 &delta,
                 &epsilon,
             ));
-
+        println!("p poly computed");
         // Commit to permutation polynomial
         //
         let p_poly_commit = commit_key.commit(&p_poly)?;
