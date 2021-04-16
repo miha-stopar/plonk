@@ -267,8 +267,11 @@ impl Proof {
         let second_element = compressed_t[1];
 
         // Pad the table to the correct size with an element that is not the highest or lowest
-        let pad = vec![second_element; domain.size() - compressed_t.len()];
-        compressed_t.extend(pad);
+
+        if domain.size() > compressed_t.len() {
+            let pad = vec![second_element; domain.size() - compressed_t.len()];
+            compressed_t.extend(pad);
+        }
 
         // Sort again to return t to sorted state
         // There may be a better way of inserting the padding so the sort does not need to happen twice

@@ -85,7 +85,6 @@ impl MultiSet {
                 .position(element)
                 .ok_or(PlookupErrors::ElementNotIndexed)?;
             s.0.insert(index, *element);
-            println!("element {:?} {:?}", index, element);
         }
 
         Ok(s)

@@ -217,28 +217,23 @@ impl StandardComposer {
         b: usize,
         x: &[Variable],
     ) {
-        // v[a] := (v[a] + v[b] + x) mod 2**w
-        for i in 0..4 {
-            // v[a] += v[b]
-            v[4 * a + i] = self.add(
-                (BlsScalar::one(), v[4 * a + i]),
-                (BlsScalar::one(), v[4 * b + i]),
-                BlsScalar::zero(),
-                BlsScalar::zero(),
-            );
+        let first = self.compose_word_from_le_bytes(&v[4*a..(4*a+4)]);
+        let second = self.compose_word_from_le_bytes(&v[4*b..(4*b+4)]);
+        let third = self.compose_word_from_le_bytes(x);
 
-            // v[a] += x
-            v[4 * a + i] = self.add(
-                (BlsScalar::one(), v[4 * a + i]),
-                (BlsScalar::one(), x[i]),
-                BlsScalar::zero(),
-                BlsScalar::zero(),
-            );
-        }
+        let sum_1 = self.add(
+            (BlsScalar::one(), first),
+            (BlsScalar::one(), second),
+            BlsScalar::zero(),
+            BlsScalar::zero(),
+        );
 
-        // compose the bytes back into a single integer
-        // so we can compute the mod operation
-        let sum = self.compose_word_from_le_bytes(&v[4 * a..(4 * a + 4)]);
+        let sum = self.add(
+            (BlsScalar::one(), sum_1),
+            (BlsScalar::one(), second),
+            BlsScalar::zero(),
+            BlsScalar::zero(),
+        );
 
         // compute the remainder mod 2^32
         let remainder = self.mod_u32(sum);
@@ -255,20 +250,15 @@ impl StandardComposer {
     /// Adds two variables by adding byte-by-byte, composing the bytes, and modding
     /// by 2**32
     pub fn add_two_mod_2_32(&mut self, v: &mut [Variable; 64], c: usize, d: usize) {
-        // v[c] := (v[c] + v[d])     mod 2**w
-        for i in 0..4 {
-            // v[c] += v[d]
-            v[4 * c + i] = self.add(
-                (BlsScalar::one(), v[4 * c + i]),
-                (BlsScalar::one(), v[4 * d + i]),
-                BlsScalar::zero(),
-                BlsScalar::zero(),
-            );
-        }
-
-        // compose the bytes back into a single integer
-        // so we can compute the mod operation
-        let sum = self.compose_word_from_le_bytes(&v[4 * c..(4 * c + 4)]);
+        let first = self.compose_word_from_le_bytes(&v[4*c..(4*c+4)]);
+        let second = self.compose_word_from_le_bytes(&v[4*d..(4*d+4)]);
+    
+        let sum = self.add(
+            (BlsScalar::one(), first),
+            (BlsScalar::one(), second),
+            BlsScalar::zero(),
+            BlsScalar::zero(),
+        );
 
         // compute the remainder mod 2^32
         let remainder = self.mod_u32(sum);
@@ -816,6 +806,10 @@ mod tests {
                     .trim(prover.cs.total_size().next_power_of_two())
                     .unwrap();
                 println!("trimmed");
+
+
+                println!("query table length {:?}", prover.cs.circuit_size());
+                println!("total length {:?}", prover.cs.total_size());
                 // Preprocess circuit
                 prover.preprocess(&ck).unwrap();
         

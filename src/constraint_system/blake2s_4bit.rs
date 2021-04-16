@@ -14,31 +14,46 @@ use std::io::Write;
 use std::convert::TryInto;
 
 impl StandardComposer {
-    /// Generates an XOR truth table out of 4-bit nibbles
-    pub fn generate_xor_table_small(&mut self) {
-        for i in 0..2u8.pow(4) {
-            for j in 0..2u8.pow(4) {
+    /// Generates plookup table with nibble-wise XOR table,
+    /// 3-bit range table, and 2-bit range table
+    pub fn generate_blake_table(&mut self) {
+        // 2^8 row byte-wise XOR table
+        for i in 0..2u16.pow(4) {
+            for j in 0..2u16.pow(4) {
                 self.lookup_table.0.push([
                     BlsScalar::from(i as u64),
                     BlsScalar::from(j as u64),
-                    BlsScalar::from((i^j) as u64),
-                    BlsScalar::zero(),
+                    BlsScalar::from((i ^ j) as u64),
+                    BlsScalar::one(),
                 ]);
             }
         }
-    }
-
-    /// Generates an XOR truth table out of bytes
-    pub fn generate_xor_table_big(&mut self) {
-        for i in 0..2u16.pow(8) {
-            for j in 0..2u16.pow(8) {
-                self.lookup_table.0.push([
-                    BlsScalar::from(i as u64),
-                    BlsScalar::from(j as u64),
-                    BlsScalar::from((i^j) as u64),
-                    BlsScalar::zero(),
-                ]);
-            }
+        // 2^4 row 4-bit range table
+        for i in 0..2u16.pow(4) {
+            self.lookup_table.0.push([
+                BlsScalar::from(i as u64),
+                BlsScalar::zero(),
+                BlsScalar::zero(),
+                BlsScalar::from(2),
+            ]);
+        }
+        // 2^3 row 3-bit range table
+        for i in 0..2u16.pow(3) {
+            self.lookup_table.0.push([
+                BlsScalar::from(i as u64),
+                BlsScalar::zero(),
+                BlsScalar::zero(),
+                BlsScalar::from(3),
+            ]);
+        }
+        // 2^2 row 2-bit range table
+        for i in 0..2u16.pow(2) {
+            self.lookup_table.0.push([
+                BlsScalar::from(i as u64),
+                BlsScalar::zero(),
+                BlsScalar::zero(),
+                BlsScalar::from(4),
+            ]);
         }
     }
 
@@ -91,18 +106,17 @@ impl StandardComposer {
         assert_eq!(nibbles.len(), 8);
 
         // Prove 4 pieces of word are actually nibbles by looking them up in the nibble-sized lookup table
-        // If (A, B, A^B) is in the lookup table, then A and B are both less than 2^8
-        // Uses 2 lookup gates to replace 8 gates used for a 8-bit range check
+        // If (A, B, A^B) is in the lookup table, then A and B are both less than 2^4
 
         let nibble_7_xor_nibble_6_var = self.add_input(
             BlsScalar::from(
-                self.variables[&nibbles[3]].reduce().0[0] ^ self.variables[&nibbles[2]].reduce().0[0]
+                self.variables[&nibbles[7]].reduce().0[0] ^ self.variables[&nibbles[6]].reduce().0[0]
             )
         );
 
         let nibble_5_xor_nibble_4_var = self.add_input(
             BlsScalar::from(
-                self.variables[&nibbles[1]].reduce().0[0] ^ self.variables[&nibbles[0]].reduce().0[0]
+                self.variables[&nibbles[5]].reduce().0[0] ^ self.variables[&nibbles[4]].reduce().0[0]
             )
         );
 
@@ -118,10 +132,12 @@ impl StandardComposer {
             )
         );
 
-        self.plookup_gate(nibbles[7], nibbles[6], nibble_7_xor_nibble_6_var, None, BlsScalar::zero());
-        self.plookup_gate(nibbles[5], nibbles[4], nibble_5_xor_nibble_4_var, None, BlsScalar::zero()); 
-        self.plookup_gate(nibbles[3], nibbles[2], nibble_3_xor_nibble_2_var, None, BlsScalar::zero());
-        self.plookup_gate(nibbles[1], nibbles[0], nibble_1_xor_nibble_0_var, None, BlsScalar::zero()); 
+        // Ensure all 8 nibbles are < 2^4 using the XOR subtable
+        let one_var = self.add_input(BlsScalar::one());
+        self.plookup_gate(nibbles[7], nibbles[6], nibble_7_xor_nibble_6_var, Some(one_var), BlsScalar::zero());
+        self.plookup_gate(nibbles[5], nibbles[4], nibble_5_xor_nibble_4_var, Some(one_var), BlsScalar::zero());
+        self.plookup_gate(nibbles[3], nibbles[2], nibble_3_xor_nibble_2_var, Some(one_var), BlsScalar::zero());
+        self.plookup_gate(nibbles[1], nibbles[0], nibble_1_xor_nibble_0_var, Some(one_var), BlsScalar::zero());
 
         let pair_3 = self.add(
             (BlsScalar::from(1 << 4), nibbles[7]),
@@ -185,7 +201,8 @@ impl StandardComposer {
         // dividend = quotient * 2^32 + remainder
         // each dividend comes from the sum of two or three
         // u32 words, and thus should be less than 4 (2 bits)
-        self.range_gate(quotient_var, 2);
+        let four_var = self.add_input(BlsScalar::from(4));
+        self.plookup_gate(quotient_var, self.zero_var, self.zero_var, Some(four_var), BlsScalar::zero());
 
         // Show mod has been done correctly with a single add gate
         // which returns the variable holding the remainder
@@ -228,28 +245,23 @@ impl StandardComposer {
     /// Adds three variables by adding nibble-by-nibble, composing the nibbles, and modding
     /// by 2**32
     pub fn add_three_mod_2_32(&mut self, v: &mut [Variable; 128], a: usize, b: usize, x: &[Variable]) {
-        // v[a] := (v[a] + v[b] + x) mod 2**w
-        for i in 0..8 {
-            // v[a] += v[b]
-            v[8*a+i] = self.add(
-                (BlsScalar::one(), v[8*a+i]),
-                (BlsScalar::one(), v[8*b+i]),
-                BlsScalar::zero(),
-                BlsScalar::zero(),
-            );
+        let first = self.compose_word_from_le_nibbles(&v[8*a..(8*a+8)]);
+        let second = self.compose_word_from_le_nibbles(&v[8*b..(8*b+8)]);
+        let third = self.compose_word_from_le_nibbles(x);
 
-            // v[a] += x
-            v[8*a+i] = self.add(
-                (BlsScalar::one(), v[8*a+i]),
-                (BlsScalar::one(), x[i]),
-                BlsScalar::zero(),
-                BlsScalar::zero(),
-            );
-        }
+        let sum_1 = self.add(
+            (BlsScalar::one(), first),
+            (BlsScalar::one(), second),
+            BlsScalar::zero(),
+            BlsScalar::zero(),
+        );
 
-        // compose the bytes back into a single integer      
-        // so we can compute the mod operation
-        let sum = self.compose_word_from_le_nibbles(&v[8*a..(8*a+8)]);
+        let sum = self.add(
+            (BlsScalar::one(), sum_1),
+            (BlsScalar::one(), second),
+            BlsScalar::zero(),
+            BlsScalar::zero(),
+        );
 
         // compute the remainder mod 2^32
         let remainder = self.mod_u32(sum);
@@ -270,20 +282,15 @@ impl StandardComposer {
     /// Adds two variables by adding byte-by-byte, composing the bytes, and modding
     /// by 2**32
     pub fn add_two_mod_2_32(&mut self, v: &mut [Variable; 128], c: usize, d: usize) {
-        // v[c] := (v[c] + v[d])     mod 2**w
-        for i in 0..8 {
-            // v[c] += v[d]
-            v[8*c+i] = self.add(
-                (BlsScalar::one(), v[8*c+i]),
-                (BlsScalar::one(), v[8*d+i]),
-                BlsScalar::zero(),
-                BlsScalar::zero(),
-            );
-        }
-
-        // compose the bytes back into a single integer      
-        // so we can compute the mod operation
-        let sum = self.compose_word_from_le_nibbles(&v[8*c..(8*c+8)]);
+        let first = self.compose_word_from_le_nibbles(&v[8*c..(8*c+8)]);
+        let second = self.compose_word_from_le_nibbles(&v[8*d..(8*d+8)]);
+    
+        let sum = self.add(
+            (BlsScalar::one(), first),
+            (BlsScalar::one(), second),
+            BlsScalar::zero(),
+            BlsScalar::zero(),
+        );
 
         // compute the remainder mod 2^32
         let remainder = self.mod_u32(sum);
@@ -351,28 +358,9 @@ impl StandardComposer {
             // show that the hi bit is actually a bit
             self.boolean_gate(split_nibbles[2*i]);
 
-            // to show that the lo bits l are less than 2^3, we need to show that 2*l < 2^4 with a plookup XOR gate
-            // AND we need to show that l < 2^4 with a second plookup XOR gate (otherwise l could be between p/2 and p/2 + 2^4
-            // and still pass the check)
-
-            // we need a variable for 2*l to include in plookup
-            let lo_times_2 = self.add(
-                // 2*lo bits
-                (BlsScalar::from(2), split_nibbles[2*i+1]),
-                // right addend is zero
-                (BlsScalar::one(), self.zero_var),
-                BlsScalar::zero(),
-                BlsScalar::zero(),
-            );
-
-            // show that l < 2^4
-            self.plookup_gate(split_nibbles[2*i+1], split_nibbles[2*i+1], self.zero_var, None, BlsScalar::zero());
-
-            // show that 2*l < 2^4
-            self.plookup_gate(lo_times_2, lo_times_2, self.zero_var, None, BlsScalar::zero());
-
-            // finally, show the high bit is actually a bit
-            self.boolean_gate(split_nibbles[2*i]);
+            // show that the lo bits l are less than 2^3 using subtable 3
+            let three_var = self.add_input(BlsScalar::from(3));
+            self.plookup_gate(split_nibbles[2*i+1], self.zero_var, self.zero_var, Some(three_var), BlsScalar::zero());
         }
 
         // Now recompose the 8 pairs of high and low bits into 8 nibbles, shifting 
@@ -411,29 +399,21 @@ impl StandardComposer {
         self.xor(&mut v[8*d..(8*d+8)], &right);
     }
 
-    /// Performs an XOR in place, mutating the left word
+    /// Performs an XOR in place, mutating the left inputs
     pub fn xor(&mut self, left: &mut [Variable], right: &[Variable]) {
-
+        assert_eq!(left.len(), right.len());
         // left := left ^ right
         for i in 0..left.len() {
             let left_val = self.variables[&left[i]].reduce().0[0];
             let right_val = self.variables[&right[i]].reduce().0[0];
+            assert!(left_val < 16);
+            assert!(right_val < 16);
             let out_var = self.add_input(BlsScalar::from(left_val ^ right_val));
-            left[i] = self.plookup_gate(left[i], right[i], out_var, None, BlsScalar::zero());
+            let one_var = self.add_input(BlsScalar::one());
+
+            left[i] = self.plookup_gate(left[i], right[i], out_var, Some(one_var), BlsScalar::zero());
         }
     }
-
-        /// Performs an XOR in place, mutating the left word
-        pub fn xor_debug(&mut self, left: &mut [Variable], right: &[Variable]) {
-            // left := left ^ right
-            for i in 0..left.len() {
-                let left_val = self.variables[&left[i]].reduce().0[0];
-                let right_val = self.variables[&right[i]].reduce().0[0];
-                let out_var = self.add_input(BlsScalar::from(left_val ^ right_val));
-                left[i] = self.plookup_gate(left[i], right[i], out_var, None, BlsScalar::zero());
-            }
-        }
-    
 
     /// This function mixes two input words, "x" and "y", into
     /// four words indexed by "a", "b", "c", and "d" selected 
@@ -525,7 +505,7 @@ impl StandardComposer {
         // by XORing with [0xF, 0xF, 0xF, 0xF, 0xF, 0xF, 0xF, 0xF]
         let ff_var = self.add_input(BlsScalar::from(0xf));
         let ff_vec = [ff_var; 8];
-        println!("flip all bits");
+
         self.xor(&mut v[112..120], &ff_vec);
 
         // XOR offset counter t=32 or t=64 is XORed into v[12], represented here as v[96]
@@ -535,7 +515,7 @@ impl StandardComposer {
         // second nibble of t. Therefore only v[97] is XORed with 4 bits of t
 
         let t_hi_var = self.add_input(BlsScalar::from((t >> 4) as u64));
-        println!("xor offset counter");
+
         self.xor(&mut v[97..98], &[t_hi_var]);
 
         // Ten rounds of mixing for blake2s
@@ -553,8 +533,7 @@ impl StandardComposer {
 
         for i in 0..8 {
             self.xor_by_indices(&mut v, i, i+8);
-            println!("xor in state");
-            self.xor_debug(&mut h[8*i..8*(i+1)], &v[8*i..8*(i+1)]);
+            self.xor(&mut h[8*i..8*(i+1)], &v[8*i..8*(i+1)]);
         }
     }
 
@@ -576,7 +555,7 @@ impl StandardComposer {
             self.add_input(BlsScalar::one()),
             self.zero_var,
             ];
-        println!("parameter");
+
         self.xor(&mut h[0..8], &parameter_vec);
 
         // pad the message to 64 bytes
@@ -598,7 +577,7 @@ impl StandardComposer {
         // key length kk = 0 bytes, input length nn = 32 bytes
         // 0x01010000 ^ (0x0 << 8) ^ 0x20 = 0x01010020 = [0x20, 0x00, 0x01, 0x01] in little endian
         let parameter_vec = vec![self.add_input(BlsScalar::from(32)), self.zero_var, self.add_input(BlsScalar::one()), self.add_input(BlsScalar::one())];
-        println!("parameter");
+
         self.xor(&mut h[0..8], &parameter_vec);
     
         // h := F( h, d[dd - 1], ll, TRUE )
@@ -610,7 +589,8 @@ impl StandardComposer {
 
     fn scalar_to_nibble_vars(&mut self, scalar: BlsScalar) -> [Variable; 64] {
         scalar.reduce().0.iter()
-            .flat_map(|u| StandardComposer::word_to_le_nibbles(*u as u32).to_vec())
+            .flat_map(|v| vec![v % (1<<32), v >> 32])
+            .flat_map(|u| StandardComposer::word_to_le_nibbles(u as u32).to_vec())
             .map(|b| self.add_input(BlsScalar::from(b as u64)))
             .collect::<Vec<Variable>>().try_into().unwrap()
     }
@@ -632,6 +612,7 @@ mod tests {
     use dusk_bls12_381::BlsScalar;
     use crate::prelude::StandardComposer;
     use crate::constraint_system::Variable;
+    use crate::proof_system::{Prover, Verifier};
 
     #[test]
         fn test_mixer() {
@@ -699,45 +680,88 @@ mod tests {
             assert_eq!(comparison, v_u32);
         }
 
-    #[test]
-    fn test_blake2s_preimage_proof() {
-        use std::convert::TryInto;
-        use super::super::helper::*;
+        #[test]
+        fn test_blake2s_preimage_proof() {
+            use super::super::helper::*;
+            use std::convert::TryInto;
+            use crate::commitment_scheme::kzg10::PublicParameters;
+            use std::fs::File;
+            use std::io;
+            use std::io::prelude::*;
+    
+            unsafe {
+                let mut file = File::open("blake2s_setup").unwrap();
+                let mut buffer = Vec::new();
+                file.read_to_end(&mut buffer).unwrap();
+    
+                let public_parameters = PublicParameters::from_slice_unchecked(&buffer).unwrap();
+    
+                let (proof, public_inputs, lookup_table) = {
+                    // Create a prover struct
+                    let mut prover = Prover::new(b"blake2s");
+            
+                    // Additionally key the transcript
+                    prover.key_transcript(b"key", b"additional seed information");
+            
+                    // prover's secret preimage
+                    let preimage = BlsScalar::zero();
+    
+                    // blake2s hash of 256-bits of zeros
+                    let hash_bytes: [u8; 64] = [
+                        0x32, 0x0b, 0x5e, 0xa9, 0x9e, 0x65, 0x3b, 0xc2, 0xb5, 0x93, 0xdb, 0x41, 0x30,
+                        0xd1, 0x0a, 0x4e, 0xfd, 0x3a, 0x0b, 0x4c, 0xc2, 0xe1, 0xa6, 0x67, 0x2b, 0x67,
+                        0x8d, 0x71, 0xdf, 0xbd, 0x33, 0xad, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    ];
 
-        let res = gadget_tester(
-            |composer| {
-                // prover's secret preimage
-                let preimage = BlsScalar::zero();
+                    prover.cs.generate_blake_table();
 
-                // blake2s hash of 256-bits of zeros
-                let hash_bytes: [u8; 64] = [
-                    0x32, 0x0b, 0x5e, 0xa9,
-                    0x9e, 0x65, 0x3b, 0xc2,
-                    0xb5, 0x93, 0xdb, 0x41,
-                    0x30, 0xd1, 0x0a, 0x4e,
-                    0xfd, 0x3a, 0x0b, 0x4c,
-                    0xc2, 0xe1, 0xa6, 0x67,
-                    0x2b, 0x67, 0x8d, 0x71,
-                    0xdf, 0xbd, 0x33, 0xad,
-                    0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00,
-                ];
+                    let hash = prover.cs.add_input(BlsScalar::from_bytes_wide(&hash_bytes));
+                    prover.cs.blake2s_preimage(preimage);
 
-                composer.generate_xor_table_big();
-                let hash = composer.add_input(BlsScalar::from_bytes_wide(&hash_bytes));
-                composer.blake2s_preimage(preimage);
-            },
-            131072,
-        );
+                    // Commit Key
+                    let (ck, _) = public_parameters
+                        .trim(prover.cs.total_size().next_power_of_two())
+                        .unwrap();
+    
+                    // Preprocess circuit
+                    prover.preprocess(&ck).unwrap();
+            
+                    // Once the prove method is called, the public inputs are cleared
+                    // So pre-fetch these before calling Prove
+                    let public_inputs = prover.cs.public_inputs.clone();
+                    let lookup_table = prover.cs.lookup_table.clone();
 
-        assert!(res.is_ok());
-    }
+                    // Compute Proof
+                    (prover.prove(&ck).unwrap(), public_inputs, lookup_table)
+                };
+    
+                    // Verifiers view
+                    //
+                    // Create a Verifier object
+                    let mut verifier = Verifier::new(b"blake2s");
+    
+                    // Additionally key the transcript
+                    verifier.key_transcript(b"key", b"additional seed information");
+    
+                    // Add circuit to verifier's composer
+                    verifier.cs.blake2s_preimage(BlsScalar::zero());
+    
+                    // Compute Commit and Verifier Key
+                    let (ck, vk) = public_parameters
+                        .trim(verifier.cs.total_size().next_power_of_two())
+                        .unwrap();
+    
+                    // Preprocess circuit
+                    verifier.preprocess(&ck).unwrap();
+    
+                    // Verify proof
+                    let res = verifier.verify(&proof, &vk, &public_inputs, &lookup_table);
+    
+                    assert!(res.is_ok());
+            }
+        }
 
     #[test]
     fn test_blake2s_hash() {
