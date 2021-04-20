@@ -181,12 +181,15 @@ impl StandardComposer {
             BlsScalar::zero(),
         );
 
-        self.add(
+        let res = self.add(
             (BlsScalar::from(1 << 16), quad_hi),
             (BlsScalar::one(), quad_lo),
             BlsScalar::zero(),
             BlsScalar::zero(),
-        )
+        );
+
+        res
+        
     }
 
     /// Modular division by 2^32
@@ -258,7 +261,7 @@ impl StandardComposer {
 
         let sum = self.add(
             (BlsScalar::one(), sum_1),
-            (BlsScalar::one(), second),
+            (BlsScalar::one(), third),
             BlsScalar::zero(),
             BlsScalar::zero(),
         );
@@ -273,7 +276,7 @@ impl StandardComposer {
         v[8*a+1] = decomposed_nibbles[1];
         v[8*a+2] = decomposed_nibbles[2];
         v[8*a+3] = decomposed_nibbles[3];
-        v[8*a+8] = decomposed_nibbles[4];
+        v[8*a+4] = decomposed_nibbles[4];
         v[8*a+5] = decomposed_nibbles[5];
         v[8*a+6] = decomposed_nibbles[6];
         v[8*a+7] = decomposed_nibbles[7];
@@ -303,7 +306,7 @@ impl StandardComposer {
         v[8*c+1] = decomposed_nibbles[1];
         v[8*c+2] = decomposed_nibbles[2];
         v[8*c+3] = decomposed_nibbles[3];
-        v[8*c+8] = decomposed_nibbles[4];
+        v[8*c+4] = decomposed_nibbles[4];
         v[8*c+5] = decomposed_nibbles[5];
         v[8*c+6] = decomposed_nibbles[6];
         v[8*c+7] = decomposed_nibbles[7];
@@ -315,7 +318,7 @@ impl StandardComposer {
         let mut initial = [self.zero_var; 8];
         initial.clone_from_slice(&v[8*n..(8*n+8)]);
         for i in 0..8 {
-            v[8*n+(i+8)%8] = initial[i]; 
+            v[8*n+(i+4)%8] = initial[i]; 
         }
     }
 
@@ -420,7 +423,6 @@ impl StandardComposer {
     /// from the working vector v. The 32-bit words in v have
     /// been decomposed into 4 bytes.
     fn mixing (&mut self, v: &mut [Variable; 128], a: usize, b: usize, c: usize, d: usize, x: &[Variable], y: &[Variable]) {
-
         // line 1: 15 gates
         // v[a] := (v[a] + v[b] + x) mod 2**32
         self.add_three_mod_2_32(v, a, b, x);
@@ -519,7 +521,8 @@ impl StandardComposer {
         self.xor(&mut v[97..98], &[t_hi_var]);
 
         // Ten rounds of mixing for blake2s
-        for i in 0..10 {
+        for i in 0..10
+         {  
             self.mixing(&mut v, 0, 4,  8, 12, &m[8*SIGMA[i][ 0]..(8*SIGMA[i][ 0]+8)], &m[8*SIGMA[i][ 1]..(8*SIGMA[i][ 1]+8)]);
             self.mixing(&mut v, 1, 5,  9, 13, &m[8*SIGMA[i][ 2]..(8*SIGMA[i][ 2]+8)], &m[8*SIGMA[i][ 3]..(8*SIGMA[i][ 3]+8)]);
             self.mixing(&mut v, 2, 6, 10, 14, &m[8*SIGMA[i][ 4]..(8*SIGMA[i][ 4]+8)], &m[8*SIGMA[i][ 5]..(8*SIGMA[i][ 5]+8)]);
@@ -596,14 +599,27 @@ impl StandardComposer {
     }
 
     /// Shows knowledge of a blake2s preimage of a hash
-    fn blake2s_preimage(&mut self, preimage: BlsScalar) -> Variable {
-        let message = self.scalar_to_nibble_vars(preimage);
-        let results = self.blake2s_256(message);
-        self.compose_scalar_from_le_nibbles(&results)
+    fn blake2s_preimage(&mut self, preimage: BlsScalar, hash: BlsScalar) {
+        let preimage_vars = self.scalar_to_nibble_vars(preimage);
+        let circuit_result_vars = self.blake2s_256(preimage_vars);
+        let circuit_result = self.compose_scalar_from_le_nibbles(&circuit_result_vars);
+        let hash_var = self.add_input(hash);
+        self.assert_equal(hash_var, circuit_result);        
     }
 
-    fn vars_to_nibbles(&mut self, v: Vec<Variable>) -> Vec<u8> {
+    fn vars_to_nibbles(&mut self, v: &[Variable]) -> Vec<u8> {
         v.iter().map(|b| (self.variables[&b].reduce().0[0] % 16) as u8).collect::<Vec<u8>>()
+    }
+
+    fn print_words(&mut self, v: &[Variable]) {
+        let nibbles = self.vars_to_nibbles(v);
+        let mut words = vec![];
+        for i in 0..16 {
+            words.push(
+                nibbles[8*i..8*(i+1)].iter().rev().fold(0u32, |acc, x| 16*acc + ((x % 16) as u32))
+            )
+        }
+        println!("{:08x?}", words);
     }
 }
 
@@ -715,10 +731,11 @@ mod tests {
                         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                     ];
 
+                    let hash = hash_bytes.iter().rev().fold(BlsScalar::zero(), |acc, x| BlsScalar::from(256)*acc + BlsScalar::from(*x as u64));
+
                     prover.cs.generate_blake_table();
 
-                    let hash = prover.cs.add_input(BlsScalar::from_bytes_wide(&hash_bytes));
-                    prover.cs.blake2s_preimage(preimage);
+                    prover.cs.blake2s_preimage(preimage, hash);
 
                     // Commit Key
                     let (ck, _) = public_parameters
@@ -746,7 +763,7 @@ mod tests {
                     verifier.key_transcript(b"key", b"additional seed information");
     
                     // Add circuit to verifier's composer
-                    verifier.cs.blake2s_preimage(BlsScalar::zero());
+                    verifier.cs.blake2s_preimage(BlsScalar::zero(), BlsScalar::zero());
     
                     // Compute Commit and Verifier Key
                     let (ck, vk) = public_parameters
@@ -790,25 +807,26 @@ mod tests {
 
         // blake2s hash of 256-bits of zeros
         let hash_nibbles: [u8; 64] = [
-            0x3, 0x2, 0x0, 0xb, 0x5, 0xe, 0xa, 0x9, 
-            0x9, 0xe, 0x6, 0x5, 0x3, 0xb, 0xc, 0x2, 
-            0xb, 0x5, 0x9, 0x3, 0xd, 0xb, 0x4, 0x1, 
-            0x3, 0x0, 0xd, 0x1, 0x0, 0xa, 0x4, 0xe, 
-            0xf, 0xd, 0x3, 0xa, 0x0, 0xb, 0x4, 0xc, 
-            0xc, 0x2, 0xe, 0x1, 0xa, 0x6, 0x6, 0x7, 
-            0x2, 0xb, 0x6, 0x7, 0x8, 0xd, 0x7, 0x1, 
-            0xd, 0xf, 0xb, 0xd, 0x3, 0x3, 0xa, 0xd, 
-        ];
-            
+            0x2, 0x3, 0xb, 0x0, 0xe, 0x5, 0x9, 0xa, 
+            0xe, 0x9, 0x5, 0x6, 0xb, 0x3, 0x2, 0xc,
+            0x5, 0xb, 0x3, 0x9, 0xb, 0xd, 0x1, 0x4,
+            0x0, 0x3, 0x1, 0xd, 0xa, 0x0, 0xe, 0x4,
+            0xd, 0xf, 0xa, 0x3, 0xb, 0x0, 0xc, 0x4,
+            0x2, 0xc, 0x1, 0xe, 0x6, 0xa, 0x7, 0x6,
+            0xb, 0x2, 0x7, 0x6, 0xd, 0x8, 0x1, 0x7,
+            0xf, 0xd, 0xd, 0xb, 0x3, 0x3, 0xd, 0xa
+            ];
+
         let mut message_vars = [composer.zero_var; 64];
         for i in 0..64 {
             message_vars[i] = composer.add_input(BlsScalar::from(message_nibbles[i] as u64));
         }
 
         let hash_vars = composer.blake2s_256(message_vars);
+
         println!("gates: {:?}", composer.circuit_size());
         for i in 0..64 {
-            assert_eq!(composer.vars_to_nibbles(hash_vars.to_vec())[i], hash_nibbles[i]);
+            assert_eq!(composer.vars_to_nibbles(&hash_vars)[i], hash_nibbles[i]);
         }
 
     }
