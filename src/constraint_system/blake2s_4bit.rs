@@ -17,7 +17,7 @@ impl StandardComposer {
     /// Generates plookup table with nibble-wise XOR table,
     /// 3-bit range table, and 2-bit range table
     pub fn generate_blake_table(&mut self) {
-        // 2^8 row byte-wise XOR table
+        // 2^8 row nibble-wise XOR table
         for i in 0..2u16.pow(4) {
             for j in 0..2u16.pow(4) {
                 self.lookup_table.0.push([
@@ -54,6 +54,18 @@ impl StandardComposer {
                 BlsScalar::zero(),
                 BlsScalar::from(4),
             ]);
+        }
+
+        // 2^8 row nibble-wise ADD table
+        for i in 0..2u16.pow(4) {
+            for j in 0..2u16.pow(4) {
+                self.lookup_table.0.push([
+                    BlsScalar::from(i as u64),
+                    BlsScalar::from(j as u64),
+                    BlsScalar::from((i + j) as u64),
+                    BlsScalar::from(5),
+                ]);
+            }
         }
     }
 
@@ -245,26 +257,42 @@ impl StandardComposer {
         word_vars
     }
     
-    /// Adds three variables by adding nibble-by-nibble, composing the nibbles, and modding
+    /// Adds three variables by adding nibble-by-nibble with plookup, composing the nibbles, and modding
     /// by 2**32
     pub fn add_three_mod_2_32(&mut self, v: &mut [Variable; 128], a: usize, b: usize, x: &[Variable]) {
-        let first = self.compose_word_from_le_nibbles(&v[8*a..(8*a+8)]);
-        let second = self.compose_word_from_le_nibbles(&v[8*b..(8*b+8)]);
-        let third = self.compose_word_from_le_nibbles(x);
+        let mut sums = [self.zero_var; 8];
+        let mut sum_1 = [self.zero_var; 8];
+        let five_var = self.add_input(BlsScalar::from(5));
+        for i in 0..8 {
+            let sum_1_var = self.add_input(
+                BlsScalar::from(
+                    self.variables[&v[8*a+i]].reduce().0[0] +
+                    self.variables[&v[8*b+i]].reduce().0[0]
+                )
+            );
+            sum_1[i] = self.plookup_gate(
+                v[8*a+i],
+                v[8*b+i],
+                sum_1_var,
+                Some(five_var),
+                BlsScalar::zero()
+            );
+            let sum_var = self.add_input(
+                BlsScalar::from(
+                    self.variables[&sum_1[i]].reduce().0[0] +
+                    self.variables[&x[i]].reduce().0[0]
+                )
+            );
+            sums[i] = self.plookup_gate(
+                sum_1[i],
+                x[i],
+                sum_var,
+                Some(five_var),
+                BlsScalar::zero()
+            );
+        }
 
-        let sum_1 = self.add(
-            (BlsScalar::one(), first),
-            (BlsScalar::one(), second),
-            BlsScalar::zero(),
-            BlsScalar::zero(),
-        );
-
-        let sum = self.add(
-            (BlsScalar::one(), sum_1),
-            (BlsScalar::one(), third),
-            BlsScalar::zero(),
-            BlsScalar::zero(),
-        );
+        let sum = self.compose_word_from_le_nibbles(&sums);
 
         // compute the remainder mod 2^32
         let remainder = self.mod_u32(sum);
@@ -282,18 +310,28 @@ impl StandardComposer {
         v[8*a+7] = decomposed_nibbles[7];
     }
 
-    /// Adds two variables by adding byte-by-byte, composing the bytes, and modding
+    /// Adds two variables by adding nibble_by_nibble, composing the nibbles, and modding
     /// by 2**32
     pub fn add_two_mod_2_32(&mut self, v: &mut [Variable; 128], c: usize, d: usize) {
-        let first = self.compose_word_from_le_nibbles(&v[8*c..(8*c+8)]);
-        let second = self.compose_word_from_le_nibbles(&v[8*d..(8*d+8)]);
-    
-        let sum = self.add(
-            (BlsScalar::one(), first),
-            (BlsScalar::one(), second),
-            BlsScalar::zero(),
-            BlsScalar::zero(),
-        );
+        let mut sums = [self.zero_var; 8];
+        let five_var = self.add_input(BlsScalar::from(5));
+        for i in 0..8 {
+            let sum_var = self.add_input(
+                BlsScalar::from(
+                    self.variables[&v[8*c+i]].reduce().0[0] +
+                    self.variables[&v[8*d+i]].reduce().0[0]
+                )
+            );
+            sums[i] = self.plookup_gate(
+                v[8*c+i],
+                v[8*d+i],
+                sum_var,
+                Some(five_var),
+                BlsScalar::zero()
+            );
+        }
+
+        let sum = self.compose_word_from_le_nibbles(&sums);
 
         // compute the remainder mod 2^32
         let remainder = self.mod_u32(sum);
@@ -821,7 +859,6 @@ mod tests {
         for i in 0..64 {
             message_vars[i] = composer.add_input(BlsScalar::from(message_nibbles[i] as u64));
         }
-
         let hash_vars = composer.blake2s_256(message_vars);
 
         println!("gates: {:?}", composer.circuit_size());
