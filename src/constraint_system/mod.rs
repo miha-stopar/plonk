@@ -14,9 +14,14 @@ pub(crate) mod variable;
 
 /// Simple Arithmetic gates
 pub mod arithmetic;
+
 /// Blake2s hash widget
 //pub mod blake2s;
 pub mod blake2s_4bit;
+
+/// MASP
+pub mod masp;
+
 /// Boolean gate
 pub mod boolean;
 /// Elliptic Curve Crypto gates
