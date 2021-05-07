@@ -578,7 +578,7 @@ impl StandardComposer {
         }
     }
 
-    /// Blake2s with input and output both 256 bits
+    /// Blake2s with input and output both 256 bits, no personalization
     pub fn blake2s_256(&mut self, message: [Variable; 64]) -> [Variable; 64] {
         // initialize h
         let mut h = self.generate_iv();
@@ -598,6 +598,40 @@ impl StandardComposer {
             ];
 
         self.xor(&mut h[0..8], &parameter_vec);
+
+        // pad the message to 64 bytes
+        let m: [Variable; 128] = [message, [self.zero_var; 64]].concat().try_into().unwrap();
+
+        // h := F( h, d[dd - 1], ll, TRUE )
+        // ll = 32 bytes
+        self.compression(&mut h, m, 32);
+
+        h
+    }
+
+    /// Blake2s with input and output both 256 bits, with personalization
+    pub fn blake2s_256_per(&mut self, message: [Variable; 64], personalization: [Variable; 16]) -> [Variable; 64] {
+        // initialize h
+        let mut h = self.generate_iv();
+
+        // XOR h[0..8] with parameter 0x01010000 ^ (kk << 8) ^ nn
+        // key length kk = 0 bytes, input length nn = 32 bytes
+        // 0x01010000 ^ (0x0 << 8) ^ 0x20 = 0x01010020 = [0x0, 0x2, 0x0, 0x0, 0x1, 0x0, 0x1, 0x0] in little endian
+        let param_word_1 = vec![
+            self.zero_var,
+            self.add_input(BlsScalar::from(2)),
+            self.zero_var,
+            self.zero_var,
+            self.add_input(BlsScalar::one()),
+            self.zero_var,
+            self.add_input(BlsScalar::one()),
+            self.zero_var,
+            ];
+
+        self.xor(&mut h[0..8], &parameter_word_1);
+
+        // XOR h[48..] with personalization
+        self.xor(&mut h[48..], &personalization);
 
         // pad the message to 64 bytes
         let m: [Variable; 128] = [message, [self.zero_var; 64]].concat().try_into().unwrap();
