@@ -617,7 +617,7 @@ impl StandardComposer {
         // XOR h[0..8] with parameter 0x01010000 ^ (kk << 8) ^ nn
         // key length kk = 0 bytes, input length nn = 32 bytes
         // 0x01010000 ^ (0x0 << 8) ^ 0x20 = 0x01010020 = [0x0, 0x2, 0x0, 0x0, 0x1, 0x0, 0x1, 0x0] in little endian
-        let param_word_1 = vec![
+        let parameter_word_1 = vec![
             self.zero_var,
             self.add_input(BlsScalar::from(2)),
             self.zero_var,

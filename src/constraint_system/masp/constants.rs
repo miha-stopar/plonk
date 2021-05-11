@@ -1,9 +1,12 @@
 //! Various constants used by the Zcash primitives.
 
-use ff::PrimeField;
-use group::Group;
-use jubjub::SubgroupPoint;
+use dusk_bls12_381::BlsScalar;
+use dusk_jubjub::GENERATOR;
+use dusk_jubjub::{JubJubAffine, JubJubExtended, JubJubScalar};
 use lazy_static::lazy_static;
+
+/// The number of bits in the JubJub scalar field modulus
+const MODULUS_BITS: u32 = 252;
 
 /// First 64 bytes of the BLAKE2s input during group hash.
 /// This is chosen to be some random string that we couldn't have anticipated when we designed
@@ -34,6 +37,8 @@ pub const PROOF_GENERATION_KEY_BASE_GENERATOR_PERSONALIZATION: &[u8; 8] = b"MASP
 
 /// BLAKE2s Personalization for the value commitment generator for the value
 pub const VALUE_COMMITMENT_GENERATOR_PERSONALIZATION: &[u8; 8] = b"MASP__v_"; //b"MASP__cv";
+
+/// BLAKE2s Personalization for the value commitment randomness
 pub const VALUE_COMMITMENT_RANDOMNESS_PERSONALIZATION: &[u8; 8] = b"MASP__r_";
 
 /// BLAKE2s Personalization for the nullifier position generator (for computing rho)
@@ -47,14 +52,14 @@ pub const ASSET_IDENTIFIER_PERSONALIZATION: &[u8; 8] = b"MASP__t_";
 
 /// The prover will demonstrate knowledge of discrete log with respect to this base when
 /// they are constructing a proof, in order to authorize proof construction.
-pub const PROOF_GENERATION_KEY_GENERATOR: SubgroupPoint = SubgroupPoint::from_raw_unchecked(
-    bls12_381::Scalar::from_raw([
+pub const PROOF_GENERATION_KEY_GENERATOR: JubJubAffine = JubJubAffine::from_raw_unchecked(
+    BlsScalar::from_raw([
         0x5f3c_723a_a253_1b66,
         0x1e24_f832_67f1_5abd,
         0x4ba1_f065_e719_fd03,
         0x4caa_eaca_af28_ed4b,
     ]),
-    bls12_381::Scalar::from_raw([
+    BlsScalar::from_raw([
         0xfe6f_96be_c575_bff8,
         0x36b4_9c71_a2af_0708,
         0xc654_dfdd_3600_4de9,
@@ -63,14 +68,14 @@ pub const PROOF_GENERATION_KEY_GENERATOR: SubgroupPoint = SubgroupPoint::from_ra
 );
 
 /// The note commitment is randomized over this generator.
-pub const NOTE_COMMITMENT_RANDOMNESS_GENERATOR: SubgroupPoint = SubgroupPoint::from_raw_unchecked(
-    bls12_381::Scalar::from_raw([
+pub const NOTE_COMMITMENT_RANDOMNESS_GENERATOR: JubJubAffine = JubJubAffine::from_raw_unchecked(
+    BlsScalar::from_raw([
         0xfc033fa2bf88cb2e,
         0xcd80edf5fe44c7bf,
         0xc6de7556abb84082,
         0x434c9be15267b091,
     ]),
-    bls12_381::Scalar::from_raw([
+    BlsScalar::from_raw([
         0xc6b8daa0ee22aeed,
         0x690b295c66b85c64,
         0x6d277197e97af8f0,
@@ -81,14 +86,14 @@ pub const NOTE_COMMITMENT_RANDOMNESS_GENERATOR: SubgroupPoint = SubgroupPoint::f
 /// The node commitment is randomized again by the position in order to supply the
 /// nullifier computation with a unique input w.r.t. the note being spent, to prevent
 /// Faerie gold attacks.
-pub const NULLIFIER_POSITION_GENERATOR: SubgroupPoint = SubgroupPoint::from_raw_unchecked(
-    bls12_381::Scalar::from_raw([
+pub const NULLIFIER_POSITION_GENERATOR: JubJubAffine = JubJubAffine::from_raw_unchecked(
+    BlsScalar::from_raw([
         0xaafee844265fc1e7,
         0x1e09674f28a4b844,
         0x84678dc2d85293df,
         0x50de6d98fee5282f,
     ]),
-    bls12_381::Scalar::from_raw([
+    BlsScalar::from_raw([
         0xed034e3ee13a1eb3,
         0x226945aee96dfe0a,
         0xf3f70dc31afe799d,
@@ -97,14 +102,14 @@ pub const NULLIFIER_POSITION_GENERATOR: SubgroupPoint = SubgroupPoint::from_raw_
 );
 
 /// The value commitment is randomized over this generator, for privacy.
-pub const VALUE_COMMITMENT_RANDOMNESS_GENERATOR: SubgroupPoint = SubgroupPoint::from_raw_unchecked(
-    bls12_381::Scalar::from_raw([
+pub const VALUE_COMMITMENT_RANDOMNESS_GENERATOR: JubJubAffine = JubJubAffine::from_raw_unchecked(
+    BlsScalar::from_raw([
         0xdd93d364cb8cec7e,
         0x91cc3e3835675450,
         0xcfa86026b8d99be9,
         0x1c6da0ce9a5e5fdb,
     ]),
-    bls12_381::Scalar::from_raw([
+    BlsScalar::from_raw([
         0x28e5fce99ce692d0,
         0xf94c2daa360302fe,
         0xbc900cd4b8ae1150,
@@ -113,14 +118,14 @@ pub const VALUE_COMMITMENT_RANDOMNESS_GENERATOR: SubgroupPoint = SubgroupPoint::
 );
 
 /// The spender proves discrete log with respect to this base at spend time.
-pub const SPENDING_KEY_GENERATOR: SubgroupPoint = SubgroupPoint::from_raw_unchecked(
-    bls12_381::Scalar::from_raw([
+pub const SPENDING_KEY_GENERATOR: JubJubAffine = JubJubAffine::from_raw_unchecked(
+    BlsScalar::from_raw([
         0xec75293d81248452,
         0x39f5b03380af6020,
         0xf831c2b19fec6026,
         0x5b389522a9e81532,
     ]),
-    bls12_381::Scalar::from_raw([
+    BlsScalar::from_raw([
         0x14b62623a186b4b1,
         0x2012d031f624fd52,
         0x75defecff1f49ef2,
@@ -129,85 +134,85 @@ pub const SPENDING_KEY_GENERATOR: SubgroupPoint = SubgroupPoint::from_raw_unchec
 );
 
 /// The generators (for each segment) used in all Pedersen commitments.
-pub const PEDERSEN_HASH_GENERATORS: &[SubgroupPoint] = &[
-    SubgroupPoint::from_raw_unchecked(
-        bls12_381::Scalar::from_raw([
+pub const PEDERSEN_HASH_GENERATORS: &[JubJubAffine] = &[
+    JubJubAffine::from_raw_unchecked(
+        BlsScalar::from_raw([
             0x1010503570c3ebf6,
             0x5c22a82a281c9181,
             0x98ba470b0d28801b,
             0x113de62be6e0d323,
         ]),
-        bls12_381::Scalar::from_raw([
+        BlsScalar::from_raw([
             0xf031edff274efb14,
             0x2ba3032d7064d633,
             0x15cea14bc9f6b04b,
             0x5059678472abb6ae,
         ]),
     ),
-    SubgroupPoint::from_raw_unchecked(
-        bls12_381::Scalar::from_raw([
+    JubJubAffine::from_raw_unchecked(
+        BlsScalar::from_raw([
             0xb9efa2cb80331936,
             0x0a0df10182a290fd,
             0xfc7cbea3c311f67f,
             0x08c02a4c57f7f2cf,
         ]),
-        bls12_381::Scalar::from_raw([
+        BlsScalar::from_raw([
             0xdaf19ac3ab182662,
             0xec376560c925452d,
             0x4dc07857131f22a0,
             0x2e560a50271fd3fc,
         ]),
     ),
-    SubgroupPoint::from_raw_unchecked(
-        bls12_381::Scalar::from_raw([
+    JubJubAffine::from_raw_unchecked(
+        BlsScalar::from_raw([
             0xc93573b98709291e,
             0xdf0694e57c6cbc03,
             0x413bc3c44e7aabe0,
             0x210f22d61b65767d,
         ]),
-        bls12_381::Scalar::from_raw([
+        BlsScalar::from_raw([
             0x4781e2656b1ddaad,
             0xc6262ed423179659,
             0xfb33884c42727482,
             0x3f46b3371cff7474,
         ]),
     ),
-    SubgroupPoint::from_raw_unchecked(
-        bls12_381::Scalar::from_raw([
+    JubJubAffine::from_raw_unchecked(
+        BlsScalar::from_raw([
             0xcf0bc7224a63d094,
             0x2bcc52dbba0ebf3a,
             0xa02f0d3f7aad771d,
             0x274e99b16d4af911,
         ]),
-        bls12_381::Scalar::from_raw([
+        BlsScalar::from_raw([
             0xe82e9061620a1df4,
             0xfd0153cfe15ec653,
             0x6b15ec6e59478694,
             0x31f5e34f0804a874,
         ]),
     ),
-    SubgroupPoint::from_raw_unchecked(
-        bls12_381::Scalar::from_raw([
+    JubJubAffine::from_raw_unchecked(
+        BlsScalar::from_raw([
             0xc64e25ca51961b53,
             0x7058160b9afaafaf,
             0x50aa77ad2f57d2f7,
             0x3ca8b98873e5d19e,
         ]),
-        bls12_381::Scalar::from_raw([
+        BlsScalar::from_raw([
             0x9dab539b32327842,
             0x5eb152c4606beb7e,
             0x238af7c9376608d6,
             0x10609ce821a5a292,
         ]),
     ),
-    SubgroupPoint::from_raw_unchecked(
-        bls12_381::Scalar::from_raw([
+    JubJubAffine::from_raw_unchecked(
+        BlsScalar::from_raw([
             0xf0ef2a816469118e,
             0x5bdd5c30d83781f0,
             0xdb3ff866eaf1bc85,
             0x1ab3fe2ac6b3ff8a,
         ]),
-        bls12_381::Scalar::from_raw([
+        BlsScalar::from_raw([
             0xe7c079b4e48233f5,
             0xa6b5863148627619,
             0xd5681f2f5c740d19,
@@ -224,24 +229,25 @@ pub const PEDERSEN_HASH_EXP_WINDOW_SIZE: u32 = 8;
 
 lazy_static! {
     /// The exp table for [`PEDERSEN_HASH_GENERATORS`].
-    pub static ref PEDERSEN_HASH_EXP_TABLE: Vec<Vec<Vec<SubgroupPoint>>> =
+    pub static ref PEDERSEN_HASH_EXP_TABLE: Vec<Vec<Vec<JubJubExtended>>> =
         generate_pedersen_hash_exp_table();
 }
 
 /// Creates the exp table for the Pedersen hash generators.
-fn generate_pedersen_hash_exp_table() -> Vec<Vec<Vec<SubgroupPoint>>> {
+fn generate_pedersen_hash_exp_table() -> Vec<Vec<Vec<JubJubExtended>>> {
     let window = PEDERSEN_HASH_EXP_WINDOW_SIZE;
 
     PEDERSEN_HASH_GENERATORS
         .iter()
         .cloned()
+        .map(|g| JubJubExtended::from(g))
         .map(|mut g| {
             let mut tables = vec![];
 
             let mut num_bits = 0;
-            while num_bits <= jubjub::Fr::NUM_BITS {
+            while num_bits <= MODULUS_BITS {
                 let mut table = Vec::with_capacity(1 << window);
-                let mut base = SubgroupPoint::identity();
+                let mut base = JubJubExtended::identity();
 
                 for _ in 0..(1 << window) {
                     table.push(base.clone());
@@ -263,12 +269,12 @@ fn generate_pedersen_hash_exp_table() -> Vec<Vec<Vec<SubgroupPoint>>> {
 
 #[cfg(test)]
 mod tests {
-    use jubjub::SubgroupPoint;
+    use jubjub::JubJubAffine;
 
     use super::*;
     use zcash_primitives::group_hash::group_hash;
 
-    fn find_group_hash(m: &[u8], personalization: &[u8; 8]) -> SubgroupPoint {
+    fn find_group_hash(m: &[u8], personalization: &[u8; 8]) -> JubJubAffine {
         let mut tag = m.to_vec();
         let i = tag.len();
         tag.push(0u8);
@@ -366,7 +372,7 @@ mod tests {
     /// Check for simple relations between the generators, that make finding collisions easy;
     /// far worse than spec inconsistencies!
     fn check_consistency_of_pedersen_hash_generators(
-        pedersen_hash_generators: &[jubjub::SubgroupPoint],
+        pedersen_hash_generators: &[jubjub::JubJubAffine],
     ) {
         for (i, p1) in pedersen_hash_generators.iter().enumerate() {
             if p1.is_identity().into() {

@@ -1,5 +1,5 @@
-// 4-bit version  
+/// 4-bit chunked blake2s circuit using Plookup  
 pub mod blake2s_4bit;
 
-// 8-bit version
+// /// 8-bit chunked blake2s circuit using Plookup 
 //pub mod blake2s_8bit;
