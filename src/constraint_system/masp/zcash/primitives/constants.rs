@@ -1,12 +1,10 @@
 //! Various constants used by the Zcash primitives.
 
-use dusk_bls12_381::BlsScalar;
-use dusk_jubjub::GENERATOR;
-use dusk_jubjub::{JubJubAffine, JubJubExtended, JubJubScalar};
 use lazy_static::lazy_static;
+use dusk_bls12_381::BlsScalar;
+use dusk_jubjub::{JubJubAffine, JubJubExtended};
+use crate::constraint_system::masp::masp::primitives::constants::MODULUS_BITS;
 
-/// The number of bits in the JubJub scalar field modulus
-const MODULUS_BITS: u32 = 252;
 
 /// First 64 bytes of the BLAKE2s input during group hash.
 /// This is chosen to be some random string that we couldn't have anticipated when we designed
@@ -17,69 +15,60 @@ pub const GH_FIRST_BLOCK: &[u8; 64] =
 
 // BLAKE2s invocation personalizations
 /// BLAKE2s Personalization for CRH^ivk = BLAKE2s(ak | nk)
-pub const CRH_IVK_PERSONALIZATION: &[u8; 8] = b"MASP_ivk";
+pub const CRH_IVK_PERSONALIZATION: &[u8; 8] = b"Zcashivk";
 
 /// BLAKE2s Personalization for PRF^nf = BLAKE2s(nk | rho)
-pub const PRF_NF_PERSONALIZATION: &[u8; 8] = b"MASP__nf";
+pub const PRF_NF_PERSONALIZATION: &[u8; 8] = b"Zcash_nf";
 
 // Group hash personalizations
 /// BLAKE2s Personalization for Pedersen hash generators.
-pub const PEDERSEN_HASH_GENERATORS_PERSONALIZATION: &[u8; 8] = b"MASP__PH";
+pub const PEDERSEN_HASH_GENERATORS_PERSONALIZATION: &[u8; 8] = b"Zcash_PH";
 
 /// BLAKE2s Personalization for the group hash for key diversification
-pub const KEY_DIVERSIFICATION_PERSONALIZATION: &[u8; 8] = b"MASP__gd";
+pub const KEY_DIVERSIFICATION_PERSONALIZATION: &[u8; 8] = b"Zcash_gd";
 
 /// BLAKE2s Personalization for the spending key base point
-pub const SPENDING_KEY_GENERATOR_PERSONALIZATION: &[u8; 8] = b"MASP__G_";
+pub const SPENDING_KEY_GENERATOR_PERSONALIZATION: &[u8; 8] = b"Zcash_G_";
 
 /// BLAKE2s Personalization for the proof generation key base point
-pub const PROOF_GENERATION_KEY_BASE_GENERATOR_PERSONALIZATION: &[u8; 8] = b"MASP__H_";
+pub const PROOF_GENERATION_KEY_BASE_GENERATOR_PERSONALIZATION: &[u8; 8] = b"Zcash_H_";
 
 /// BLAKE2s Personalization for the value commitment generator for the value
-pub const VALUE_COMMITMENT_GENERATOR_PERSONALIZATION: &[u8; 8] = b"MASP__v_"; //b"MASP__cv";
-
-/// BLAKE2s Personalization for the value commitment randomness
-pub const VALUE_COMMITMENT_RANDOMNESS_PERSONALIZATION: &[u8; 8] = b"MASP__r_";
+pub const VALUE_COMMITMENT_GENERATOR_PERSONALIZATION: &[u8; 8] = b"Zcash_cv";
 
 /// BLAKE2s Personalization for the nullifier position generator (for computing rho)
-pub const NULLIFIER_POSITION_IN_TREE_GENERATOR_PERSONALIZATION: &[u8; 8] = b"MASP__J_";
-
-/// Length in bytes of the asset identifier
-pub const ASSET_IDENTIFIER_LENGTH: usize = 32;
-
-/// BLAKE2s Personalization for deriving asset identifier from asset name
-pub const ASSET_IDENTIFIER_PERSONALIZATION: &[u8; 8] = b"MASP__t_";
+pub const NULLIFIER_POSITION_IN_TREE_GENERATOR_PERSONALIZATION: &[u8; 8] = b"Zcash_J_";
 
 /// The prover will demonstrate knowledge of discrete log with respect to this base when
 /// they are constructing a proof, in order to authorize proof construction.
 pub const PROOF_GENERATION_KEY_GENERATOR: JubJubAffine = JubJubAffine::from_raw_unchecked(
     BlsScalar::from_raw([
-        0x5f3c_723a_a253_1b66,
-        0x1e24_f832_67f1_5abd,
-        0x4ba1_f065_e719_fd03,
-        0x4caa_eaca_af28_ed4b,
+        0x3af2_dbef_b96e_2571,
+        0xadf2_d038_f2fb_b820,
+        0x7043_03f1_e890_6081,
+        0x1457_a502_31cd_e2df,
     ]),
     BlsScalar::from_raw([
-        0xfe6f_96be_c575_bff8,
-        0x36b4_9c71_a2af_0708,
-        0xc654_dfdd_3600_4de9,
-        0x0093_0d67_d690_6365,
+        0x467a_f9f7_e05d_e8e7,
+        0x50df_51ea_f5a1_49d2,
+        0xdec9_0184_0f49_48cc,
+        0x54b6_d107_18df_2a7a,
     ]),
 );
 
 /// The note commitment is randomized over this generator.
 pub const NOTE_COMMITMENT_RANDOMNESS_GENERATOR: JubJubAffine = JubJubAffine::from_raw_unchecked(
     BlsScalar::from_raw([
-        0xfc033fa2bf88cb2e,
-        0xcd80edf5fe44c7bf,
-        0xc6de7556abb84082,
-        0x434c9be15267b091,
+        0xa514_3b34_a8e3_6462,
+        0xf091_9d06_ffb1_ecda,
+        0xa140_9aa1_f33b_ec2c,
+        0x26eb_9f8a_9ec7_2a8c,
     ]),
     BlsScalar::from_raw([
-        0xc6b8daa0ee22aeed,
-        0x690b295c66b85c64,
-        0x6d277197e97af8f0,
-        0x29e2926993d3bc73,
+        0xd4fc_6365_796c_77ac,
+        0x96b7_8bea_fa9c_c44c,
+        0x949d_7747_6e26_2c95,
+        0x114b_7501_ad10_4c57,
     ]),
 );
 
@@ -88,48 +77,65 @@ pub const NOTE_COMMITMENT_RANDOMNESS_GENERATOR: JubJubAffine = JubJubAffine::fro
 /// Faerie gold attacks.
 pub const NULLIFIER_POSITION_GENERATOR: JubJubAffine = JubJubAffine::from_raw_unchecked(
     BlsScalar::from_raw([
-        0xaafee844265fc1e7,
-        0x1e09674f28a4b844,
-        0x84678dc2d85293df,
-        0x50de6d98fee5282f,
+        0x2ce3_3921_888d_30db,
+        0xe81c_ee09_a561_229e,
+        0xdb56_b6db_8d80_75ed,
+        0x2400_c2e2_e336_2644,
     ]),
     BlsScalar::from_raw([
-        0xed034e3ee13a1eb3,
-        0x226945aee96dfe0a,
-        0xf3f70dc31afe799d,
-        0x03260f0bf1244050,
+        0xa3f7_fa36_c72b_0065,
+        0xe155_b8e8_ffff_2e42,
+        0xfc9e_8a15_a096_ba8f,
+        0x6136_9d54_40bf_84a5,
+    ]),
+);
+
+/// The value commitment is used to check balance between inputs and outputs. The value is
+/// placed over this generator.
+pub const VALUE_COMMITMENT_VALUE_GENERATOR: JubJubAffine = JubJubAffine::from_raw_unchecked(
+    BlsScalar::from_raw([
+        0x3618_3b2c_b4d7_ef51,
+        0x9472_c89a_c043_042d,
+        0xd861_8ed1_d15f_ef4e,
+        0x273f_910d_9ecc_1615,
+    ]),
+    BlsScalar::from_raw([
+        0xa77a_81f5_0667_c8d7,
+        0xbc33_32d0_fa1c_cd18,
+        0xd322_94fd_8977_4ad6,
+        0x466a_7e3a_82f6_7ab1,
     ]),
 );
 
 /// The value commitment is randomized over this generator, for privacy.
 pub const VALUE_COMMITMENT_RANDOMNESS_GENERATOR: JubJubAffine = JubJubAffine::from_raw_unchecked(
     BlsScalar::from_raw([
-        0xdd93d364cb8cec7e,
-        0x91cc3e3835675450,
-        0xcfa86026b8d99be9,
-        0x1c6da0ce9a5e5fdb,
+        0x3bce_3b77_9366_4337,
+        0xd1d8_da41_af03_744e,
+        0x7ff6_826a_d580_04b4,
+        0x6800_f4fa_0f00_1cfc,
     ]),
     BlsScalar::from_raw([
-        0x28e5fce99ce692d0,
-        0xf94c2daa360302fe,
-        0xbc900cd4b8ae1150,
-        0x555f11f9b720d50b,
+        0x3cae_fab9_380b_6a8b,
+        0xad46_f1b0_473b_803b,
+        0xe6fb_2a6e_1e22_ab50,
+        0x6d81_d3a9_cb45_dedb,
     ]),
 );
 
 /// The spender proves discrete log with respect to this base at spend time.
 pub const SPENDING_KEY_GENERATOR: JubJubAffine = JubJubAffine::from_raw_unchecked(
     BlsScalar::from_raw([
-        0xec75293d81248452,
-        0x39f5b03380af6020,
-        0xf831c2b19fec6026,
-        0x5b389522a9e81532,
+        0x47bf_4692_0a95_a753,
+        0xd5b9_a7d3_ef8e_2827,
+        0xd418_a7ff_2675_3b6a,
+        0x0926_d4f3_2059_c712,
     ]),
     BlsScalar::from_raw([
-        0x14b62623a186b4b1,
-        0x2012d031f624fd52,
-        0x75defecff1f49ef2,
-        0x0cbc5f9f1e52e0ab,
+        0x3056_32ad_aaf2_b530,
+        0x6d65_674d_cedb_ddbc,
+        0x53bb_37d0_c21c_fd05,
+        0x57a1_019e_6de9_b675,
     ]),
 );
 
@@ -137,86 +143,86 @@ pub const SPENDING_KEY_GENERATOR: JubJubAffine = JubJubAffine::from_raw_unchecke
 pub const PEDERSEN_HASH_GENERATORS: &[JubJubAffine] = &[
     JubJubAffine::from_raw_unchecked(
         BlsScalar::from_raw([
-            0x1010503570c3ebf6,
-            0x5c22a82a281c9181,
-            0x98ba470b0d28801b,
-            0x113de62be6e0d323,
+            0x194e_4292_6f66_1b51,
+            0x2f0c_718f_6f0f_badd,
+            0xb5ea_25de_7ec0_e378,
+            0x73c0_16a4_2ded_9578,
         ]),
         BlsScalar::from_raw([
-            0xf031edff274efb14,
-            0x2ba3032d7064d633,
-            0x15cea14bc9f6b04b,
-            0x5059678472abb6ae,
-        ]),
-    ),
-    JubJubAffine::from_raw_unchecked(
-        BlsScalar::from_raw([
-            0xb9efa2cb80331936,
-            0x0a0df10182a290fd,
-            0xfc7cbea3c311f67f,
-            0x08c02a4c57f7f2cf,
-        ]),
-        BlsScalar::from_raw([
-            0xdaf19ac3ab182662,
-            0xec376560c925452d,
-            0x4dc07857131f22a0,
-            0x2e560a50271fd3fc,
+            0x77bf_abd4_3224_3cca,
+            0xf947_2e8b_c04e_4632,
+            0x79c9_166b_837e_dc5e,
+            0x289e_87a2_d352_1b57,
         ]),
     ),
     JubJubAffine::from_raw_unchecked(
         BlsScalar::from_raw([
-            0xc93573b98709291e,
-            0xdf0694e57c6cbc03,
-            0x413bc3c44e7aabe0,
-            0x210f22d61b65767d,
+            0xb981_9dc8_2d90_607e,
+            0xa361_ee3f_d48f_df77,
+            0x52a3_5a8c_1908_dd87,
+            0x15a3_6d1f_0f39_0d88,
         ]),
         BlsScalar::from_raw([
-            0x4781e2656b1ddaad,
-            0xc6262ed423179659,
-            0xfb33884c42727482,
-            0x3f46b3371cff7474,
-        ]),
-    ),
-    JubJubAffine::from_raw_unchecked(
-        BlsScalar::from_raw([
-            0xcf0bc7224a63d094,
-            0x2bcc52dbba0ebf3a,
-            0xa02f0d3f7aad771d,
-            0x274e99b16d4af911,
-        ]),
-        BlsScalar::from_raw([
-            0xe82e9061620a1df4,
-            0xfd0153cfe15ec653,
-            0x6b15ec6e59478694,
-            0x31f5e34f0804a874,
+            0x7b0d_c53c_4ebf_1891,
+            0x1f3a_beeb_98fa_d3e8,
+            0xf789_1142_c001_d925,
+            0x015d_8c7f_5b43_fe33,
         ]),
     ),
     JubJubAffine::from_raw_unchecked(
         BlsScalar::from_raw([
-            0xc64e25ca51961b53,
-            0x7058160b9afaafaf,
-            0x50aa77ad2f57d2f7,
-            0x3ca8b98873e5d19e,
+            0x76d6_f7c2_b67f_c475,
+            0xbae8_e5c4_6641_ae5c,
+            0xeb69_ae39_f5c8_4210,
+            0x6643_21a5_8246_e2f6,
         ]),
         BlsScalar::from_raw([
-            0x9dab539b32327842,
-            0x5eb152c4606beb7e,
-            0x238af7c9376608d6,
-            0x10609ce821a5a292,
+            0x80ed_502c_9793_d457,
+            0x8bb2_2a7f_1784_b498,
+            0xe000_a46c_8e8c_e853,
+            0x362e_1500_d24e_ee9e,
         ]),
     ),
     JubJubAffine::from_raw_unchecked(
         BlsScalar::from_raw([
-            0xf0ef2a816469118e,
-            0x5bdd5c30d83781f0,
-            0xdb3ff866eaf1bc85,
-            0x1ab3fe2ac6b3ff8a,
+            0x4c76_7804_c1c4_a2cc,
+            0x7d02_d50e_654b_87f2,
+            0xedc5_f4a9_cff2_9fd5,
+            0x323a_6548_ce9d_9876,
         ]),
         BlsScalar::from_raw([
-            0xe7c079b4e48233f5,
-            0xa6b5863148627619,
-            0xd5681f2f5c740d19,
-            0x2031e442c4af8277,
+            0x8471_4bec_a335_70e9,
+            0x5103_afa1_a11f_6a85,
+            0x9107_0acb_d8d9_47b7,
+            0x2f7e_e40c_4b56_cad8,
+        ]),
+    ),
+    JubJubAffine::from_raw_unchecked(
+        BlsScalar::from_raw([
+            0x4680_9430_657f_82d1,
+            0xefd5_9313_05f2_f0bf,
+            0x89b6_4b4e_0336_2796,
+            0x3bd2_6660_00b5_4796,
+        ]),
+        BlsScalar::from_raw([
+            0x9996_8299_c365_8aef,
+            0xb3b9_d809_5859_d14c,
+            0x3978_3238_1406_c9e5,
+            0x494b_c521_03ab_9d0a,
+        ]),
+    ),
+    JubJubAffine::from_raw_unchecked(
+        BlsScalar::from_raw([
+            0xcb3c_0232_58d3_2079,
+            0x1d9e_5ca2_1135_ff6f,
+            0xda04_9746_d76d_3ee5,
+            0x6344_7b2b_a31b_b28a,
+        ]),
+        BlsScalar::from_raw([
+            0x4360_8211_9f8d_629a,
+            0xa802_00d2_c66b_13a7,
+            0x64cd_b107_0a13_6a28,
+            0x64ec_4689_e8bf_b6e5,
         ]),
     ),
 ];
@@ -229,28 +235,27 @@ pub const PEDERSEN_HASH_EXP_WINDOW_SIZE: u32 = 8;
 
 lazy_static! {
     /// The exp table for [`PEDERSEN_HASH_GENERATORS`].
-    pub static ref PEDERSEN_HASH_EXP_TABLE: Vec<Vec<Vec<JubJubExtended>>> =
+    pub static ref PEDERSEN_HASH_EXP_TABLE: Vec<Vec<Vec<JubJubAffine>>> =
         generate_pedersen_hash_exp_table();
 }
 
 /// Creates the exp table for the Pedersen hash generators.
-fn generate_pedersen_hash_exp_table() -> Vec<Vec<Vec<JubJubExtended>>> {
+fn generate_pedersen_hash_exp_table() -> Vec<Vec<Vec<JubJubAffine>>> {
     let window = PEDERSEN_HASH_EXP_WINDOW_SIZE;
 
     PEDERSEN_HASH_GENERATORS
         .iter()
         .cloned()
-        .map(|g| JubJubExtended::from(g))
-        .map(|mut g| {
+        .map(|g_aff| {
             let mut tables = vec![];
-
+            let mut g = JubJubExtended::from(g_aff);
             let mut num_bits = 0;
             while num_bits <= MODULUS_BITS {
                 let mut table = Vec::with_capacity(1 << window);
                 let mut base = JubJubExtended::identity();
 
                 for _ in 0..(1 << window) {
-                    table.push(base.clone());
+                    table.push(JubJubAffine::from(base.clone()));
                     base += g;
                 }
 
@@ -272,7 +277,7 @@ mod tests {
     use jubjub::JubJubAffine;
 
     use super::*;
-    use zcash_primitives::group_hash::group_hash;
+    use crate::group_hash::group_hash;
 
     fn find_group_hash(m: &[u8], personalization: &[u8; 8]) -> JubJubAffine {
         let mut tag = m.to_vec();
@@ -317,9 +322,17 @@ mod tests {
     }
 
     #[test]
+    fn value_commitment_value_generator() {
+        assert_eq!(
+            find_group_hash(b"v", VALUE_COMMITMENT_GENERATOR_PERSONALIZATION),
+            VALUE_COMMITMENT_VALUE_GENERATOR,
+        );
+    }
+
+    #[test]
     fn value_commitment_randomness_generator() {
         assert_eq!(
-            find_group_hash(b"r", VALUE_COMMITMENT_RANDOMNESS_PERSONALIZATION),
+            find_group_hash(b"r", VALUE_COMMITMENT_GENERATOR_PERSONALIZATION),
             VALUE_COMMITMENT_RANDOMNESS_GENERATOR,
         );
     }
@@ -351,6 +364,7 @@ mod tests {
             PROOF_GENERATION_KEY_GENERATOR,
             NOTE_COMMITMENT_RANDOMNESS_GENERATOR,
             NULLIFIER_POSITION_GENERATOR,
+            VALUE_COMMITMENT_VALUE_GENERATOR,
             VALUE_COMMITMENT_RANDOMNESS_GENERATOR,
             SPENDING_KEY_GENERATOR,
         ];
@@ -421,3 +435,4 @@ mod tests {
         check_consistency_of_pedersen_hash_generators(&pedersen_hash_generators);
     }
 }
+

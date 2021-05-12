@@ -1,6 +1,6 @@
 
-/// Sapling-based MASP ported to Plonk/Plookup 
+/// Primitives and proofs for MASP
 pub mod masp;
 
-/// Constants from Sapling MASP
-pub mod constants;
+/// Primitives and proofs for Zcash
+pub mod zcash;
