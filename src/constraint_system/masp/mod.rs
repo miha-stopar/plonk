@@ -1,6 +1,6 @@
 
-/// Primitives and proofs for MASP
+/// Circuit used in MASP
 pub mod masp;
 
-/// Primitives and proofs for Zcash
-pub mod zcash;
+/// Constants used in MASP
+pub mod constants;
