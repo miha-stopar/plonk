@@ -5,6 +5,7 @@ use crate::constraint_system::Variable;
 use dusk_bls12_381::BlsScalar;
 use crate::constraint_system::ecc::Point;
 use dusk_jubjub::JubJubAffine;
+use std::convert::TryInto;
 
 impl StandardComposer {
     /// Check that (u,v) is a point on JubJub
@@ -176,4 +177,60 @@ impl StandardComposer {
             BlsScalar::zero(),
         );
     }
+
+    /// Converts a string into a BlsScalar
+    pub fn string_to_scalar(s: &str) -> BlsScalar {
+        let mut bytes = s.as_bytes();
+        assert!(bytes.len() <= 64);
+
+        let pad = vec![0u8; 64-bytes.len()];
+        bytes.iter().chain(pad.iter());
+
+        BlsScalar::from_bytes_wide(bytes.try_into().unwrap())
+    }
+
+    /// Generates a lookup table for windowed Montgomery addition
+    /// in the Pedersen hash
+    pub fn generate_montgomery_table(&mut self) {
+        // 2^8 row nibble-wise XOR table
+        let table_id_string = "pedersen_hash_montgomery_lookup";
+        let mut bytes = table_id_string.as_bytes();
+        assert!(bytes.len() <= 64);
+
+        let pad = vec![0u8; 64-bytes.len()];
+        bytes.iter().chain(pad.iter());
+
+        BlsScalar::from_bytes_wide(bytes.try_into().unwrap())
+        let table_id_scalar = BlsScalar::from_bytes_wide(bytes.try_into().unwrap())
+        
+        for i in 0..2u16.pow(4) {
+            for j in 0..2u16.pow(4) {
+                self.lookup_table.0.push([
+                    BlsScalar::from(i as u64),
+                    BlsScalar::from(j as u64),
+                    BlsScalar::from((i ^ j) as u64),
+                    BlsScalar::one(),
+                ]);
+            }
+        }
+    }
+
+    /*pub fn pedersen_hash_to_point(&mut self, message: &[bool]) -> JubJubAffine {
+
+        let m = message.iter();
+        let p = constants::PEDERSEN_HASH_GENERATORS;
+
+        let s0 = self.add_input(BlsScalar::from(m.next().unwrap();
+        let s1 = m.next().unwrap();
+        let s2 = m.next().unwrap();
+
+        // constrain to bits
+        self.boolean_gate(s0);
+        self.boolean_gate(s1);
+        self.boolean_gate(s2);
+
+        JubJubAffine::identity()
+
+    }
+    */
 }
