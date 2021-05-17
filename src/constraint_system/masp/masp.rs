@@ -4,8 +4,10 @@ use crate::constraint_system::StandardComposer;
 use crate::constraint_system::Variable;
 use dusk_bls12_381::BlsScalar;
 use crate::constraint_system::ecc::Point;
-use dusk_jubjub::JubJubAffine;
+use dusk_jubjub::{JubJubAffine, JubJubExtended, JubJubScalar};
 use std::convert::TryInto;
+use crate::constraint_system::masp::constants;
+use dusk_bytes::Serializable;
 
 impl StandardComposer {
     /// Check that (u,v) is a point on JubJub
@@ -179,8 +181,8 @@ impl StandardComposer {
     }
 
     /// Converts a string into a BlsScalar
-    pub fn string_to_scalar(s: &str) -> BlsScalar {
-        let mut bytes = s.as_bytes();
+    fn string_to_scalar(s: &str) -> BlsScalar {
+        let bytes = s.as_bytes();
         assert!(bytes.len() <= 64);
 
         let pad = vec![0u8; 64-bytes.len()];
@@ -189,48 +191,94 @@ impl StandardComposer {
         BlsScalar::from_bytes_wide(bytes.try_into().unwrap())
     }
 
-    /// Generates a lookup table for windowed Montgomery addition
-    /// in the Pedersen hash
-    pub fn generate_montgomery_table(&mut self) {
+    /// Generates lookup tables for windowed Montgomery addition in the 
+    /// Pedersen hash. Two seperate subtables record the x and y coordinates.
+    pub fn generate_pedersen_tables(&mut self) {
         // 2^8 row nibble-wise XOR table
-        let table_id_string = "pedersen_hash_montgomery_lookup";
-        let mut bytes = table_id_string.as_bytes();
-        assert!(bytes.len() <= 64);
+        let x_table_id_scalar = StandardComposer::string_to_scalar("pedersen_hash_x");
+        let y_table_id_scalar = StandardComposer::string_to_scalar("pedersen_hash_y");
 
-        let pad = vec![0u8; 64-bytes.len()];
-        bytes.iter().chain(pad.iter());
+        let p = constants::PEDERSEN_HASH_GENERATORS;
 
-        BlsScalar::from_bytes_wide(bytes.try_into().unwrap())
-        let table_id_scalar = BlsScalar::from_bytes_wide(bytes.try_into().unwrap())
-        
-        for i in 0..2u16.pow(4) {
-            for j in 0..2u16.pow(4) {
-                self.lookup_table.0.push([
-                    BlsScalar::from(i as u64),
-                    BlsScalar::from(j as u64),
-                    BlsScalar::from((i ^ j) as u64),
-                    BlsScalar::one(),
-                ]);
+        for i in 0..p.len() {
+            for j in 0..8u8 {
+                // encodes {0, 1, 2, 3, 4, 5, 6, 7} as {1, -1, 2, -2, 3, -3, 4, -4} 
+                // by intermediately representing n as {n, 0} and -n as {n, 1}
+                // for positive n
+                let enc = j / 2 + 1;
+                let sgn = (j % 2) == 0;
+                for k in 0..63u8 {
+                    let jubjub_exponent = match sgn {
+                        true => JubJubScalar::from((enc*k) as u64),
+                        false => -JubJubScalar::from((enc*k) as u64), 
+                    };
+                    let exponent = BlsScalar::from_bytes(&jubjub_exponent.to_bytes()).unwrap();
+                    let gen_affine = p[i];
+                    let gen_extended = JubJubExtended::from(p[i]);
+                    let res_extended = gen_extended * jubjub_exponent;
+                    let res_affine = JubJubAffine::from(res_extended);
+
+                    self.lookup_table.0.push([
+                        gen_affine.get_x(), // x coordinate of g_i
+                        res_affine.get_x(), // x coordinate of g_i^(j*k)
+                        exponent, // exponent
+                        x_table_id_scalar,
+                    ]);
+
+                    self.lookup_table.0.push([
+                        gen_affine.get_y(), // y coordinate of g_i
+                        res_affine.get_y(), // y coordinate of g_i^(j*k)
+                        exponent, // exponent
+                        y_table_id_scalar,
+                    ]);
+                }
             }
         }
     }
 
-    /*pub fn pedersen_hash_to_point(&mut self, message: &[bool]) -> JubJubAffine {
+    /// Pedersen hash using Plookup
+    pub fn pedersen_hash_to_point(&mut self, message: &[bool]) -> JubJubAffine {
 
-        let m = message.iter();
+        let mut m = message.iter();
         let p = constants::PEDERSEN_HASH_GENERATORS;
 
-        let s0 = self.add_input(BlsScalar::from(m.next().unwrap();
-        let s1 = m.next().unwrap();
-        let s2 = m.next().unwrap();
+        let s0 = self.add_input(BlsScalar::from(*m.next().unwrap() as u64));
+        let s1 = self.add_input(BlsScalar::from(*m.next().unwrap() as u64));
+        let s2 = self.add_input(BlsScalar::from(*m.next().unwrap() as u64));
 
         // constrain to bits
         self.boolean_gate(s0);
         self.boolean_gate(s1);
         self.boolean_gate(s2);
 
+        /* 
+        To do:
+
+        - Verify the encoding <.> is correctly understood (why the 2^4 ?)
+        - Figure out why the constraint count is the way it is
+
+        - Add gates that compose the bits to get 3-bit value j used in lookup
+        - Compute chunk index k
+        - Compute generator index i
+        - Use 2 plookup gates to lookup j*k*P_i x and y values
+        - Add results to accumulated point
+
+        For each chunk, this will cost:
+        - 3 boolean constraints (if not already constrained)
+
+        - 2 gates to get encoding
+            - 1 to compose 2 lower bits
+            - 1 to multiply by sign bit       
+        - 2 plookup gates
+        - 3 montgomery addition gates
+        
+
+
+        
+        */
+
         JubJubAffine::identity()
 
     }
-    */
+    
 }
