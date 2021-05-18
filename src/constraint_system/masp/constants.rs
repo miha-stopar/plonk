@@ -1,5 +1,7 @@
-use dusk_jubjub::JubJubAffine;
+use dusk_jubjub::{JubJubAffine, JubJubExtended};
 use dusk_bls12_381::BlsScalar;
+use lazy_static::lazy_static;
+
 
 /// The generators (for each segment) used in all Pedersen commitments.
 pub const PEDERSEN_HASH_GENERATORS: &[JubJubAffine] = &[
@@ -88,3 +90,53 @@ pub const PEDERSEN_HASH_GENERATORS: &[JubJubAffine] = &[
         ]),
     ),
 ];
+
+/// The maximum number of chunks per segment of the Pedersen hash.
+pub const PEDERSEN_HASH_CHUNKS_PER_GENERATOR: usize = 63;
+
+/// The window size for exponentiation of Pedersen hash generators outside the circuit.
+pub const PEDERSEN_HASH_EXP_WINDOW_SIZE: u32 = 8;
+
+lazy_static! {
+    /// The exp table for [`PEDERSEN_HASH_GENERATORS`].
+    pub static ref PEDERSEN_HASH_EXP_TABLE: Vec<Vec<Vec<JubJubExtended>>> =
+        generate_pedersen_hash_exp_table();
+}
+
+// The number of bits needed to represent the modulus, from zkcrypto/jubjub
+const MODULUS_BITS: u32 = 252;
+const NUM_BITS: u32 = MODULUS_BITS;
+
+/// Creates the exp table for the Pedersen hash generators.
+fn generate_pedersen_hash_exp_table() -> Vec<Vec<Vec<JubJubExtended>>> {
+    let window = PEDERSEN_HASH_EXP_WINDOW_SIZE;
+
+    PEDERSEN_HASH_GENERATORS
+        .iter()
+        .cloned()
+        .map(|g_aff| {
+            let mut tables = vec![];
+            let mut g = JubJubExtended::from(g_aff);
+
+            let mut num_bits = 0;
+            while num_bits <= NUM_BITS {
+                let mut table = Vec::with_capacity(1 << window);
+                let mut base = JubJubExtended::identity();
+
+                for _ in 0..(1 << window) {
+                    table.push(base.clone());
+                    base += g;
+                }
+
+                tables.push(table);
+                num_bits += window;
+
+                for _ in 0..window {
+                    g = g.double();
+                }
+            }
+
+            tables
+        })
+        .collect()
+}

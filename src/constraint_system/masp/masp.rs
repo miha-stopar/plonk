@@ -237,9 +237,25 @@ impl StandardComposer {
     }
 
     /// Pedersen hash using Plookup
-    pub fn pedersen_hash_to_point(&mut self, message: &[bool]) -> JubJubAffine {
+    pub fn pedersen_hash_to_point(&mut self, message: &[u8]) -> JubJubAffine {
 
-        let mut m = message.iter();
+        let pad = vec![0u8; 3 - (message.len() % 3)];
+        let message_prime = [message, &pad[..]].concat();
+        /*
+        let chunks = message_prime
+            // break into chunks of length 3
+            .chunks(3)
+            // compute the encoding for each
+            .map(|chunk|
+                // compute X_s
+                self.add_gate(
+                    (BlsScalar::)
+                )
+            )
+            .collect::<Vec<u8>>();
+        
+
+
         let p = constants::PEDERSEN_HASH_GENERATORS;
 
         let s0 = self.add_input(BlsScalar::from(*m.next().unwrap() as u64));
@@ -270,15 +286,28 @@ impl StandardComposer {
             - 1 to compose 2 lower bits
             - 1 to multiply by sign bit       
         - 2 plookup gates
-        - 3 montgomery addition gates
+        - 3 montgomery addition custom gates (which will likely be ~3 internal gates each themselves.)
         
 
 
         
         */
-
+        */
         JubJubAffine::identity()
 
     }
     
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::constraint_system::StandardComposer;
+    #[test]
+    fn test_masp_components() {
+        let message: [u8; 7] = [0, 1, 1, 0, 0, 1, 0];
+        let mut cs = StandardComposer::new();
+        cs.pedersen_hash_to_point(&message[..]);        
+
+        assert!(0==1);
+    }
 }

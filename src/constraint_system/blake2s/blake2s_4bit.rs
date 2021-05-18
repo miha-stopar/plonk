@@ -770,7 +770,7 @@ mod tests {
 
         #[test]
         fn test_blake2s_preimage_proof() {
-            use super::super::helper::*;
+            use crate::constraint_system::helper::*;
             use std::convert::TryInto;
             use crate::commitment_scheme::kzg10::PublicParameters;
             use std::fs::File;
