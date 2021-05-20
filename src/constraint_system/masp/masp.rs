@@ -180,62 +180,6 @@ impl StandardComposer {
         );
     }
 
-    /// Converts a string into a BlsScalar
-    fn string_to_scalar(s: &str) -> BlsScalar {
-        let bytes = s.as_bytes();
-        assert!(bytes.len() <= 64);
-
-        let pad = vec![0u8; 64-bytes.len()];
-        bytes.iter().chain(pad.iter());
-
-        BlsScalar::from_bytes_wide(bytes.try_into().unwrap())
-    }
-
-    /// Generates lookup tables for windowed Montgomery addition in the 
-    /// Pedersen hash. Two seperate subtables record the x and y coordinates.
-    pub fn generate_pedersen_tables(&mut self) {
-        // 2^8 row nibble-wise XOR table
-        let x_table_id_scalar = StandardComposer::string_to_scalar("pedersen_hash_x");
-        let y_table_id_scalar = StandardComposer::string_to_scalar("pedersen_hash_y");
-
-        let p = constants::PEDERSEN_HASH_GENERATORS;
-
-        for i in 0..p.len() {
-            for j in 0..8u8 {
-                // encodes {0, 1, 2, 3, 4, 5, 6, 7} as {1, -1, 2, -2, 3, -3, 4, -4} 
-                // by intermediately representing n as {n, 0} and -n as {n, 1}
-                // for positive n
-                let enc = j / 2 + 1;
-                let sgn = (j % 2) == 0;
-                for k in 0..63u8 {
-                    let jubjub_exponent = match sgn {
-                        true => JubJubScalar::from((enc*k) as u64),
-                        false => -JubJubScalar::from((enc*k) as u64), 
-                    };
-                    let exponent = BlsScalar::from_bytes(&jubjub_exponent.to_bytes()).unwrap();
-                    let gen_affine = p[i];
-                    let gen_extended = JubJubExtended::from(p[i]);
-                    let res_extended = gen_extended * jubjub_exponent;
-                    let res_affine = JubJubAffine::from(res_extended);
-
-                    self.lookup_table.0.push([
-                        gen_affine.get_x(), // x coordinate of g_i
-                        res_affine.get_x(), // x coordinate of g_i^(j*k)
-                        exponent, // exponent
-                        x_table_id_scalar,
-                    ]);
-
-                    self.lookup_table.0.push([
-                        gen_affine.get_y(), // y coordinate of g_i
-                        res_affine.get_y(), // y coordinate of g_i^(j*k)
-                        exponent, // exponent
-                        y_table_id_scalar,
-                    ]);
-                }
-            }
-        }
-    }
-
     /// Pedersen hash using Plookup
     pub fn pedersen_hash_to_point(&mut self, message: &[u8]) -> JubJubAffine {
 
