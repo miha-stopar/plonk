@@ -101,6 +101,11 @@ lazy_static! {
     /// The exp table for [`PEDERSEN_HASH_GENERATORS`].
     pub static ref PEDERSEN_HASH_EXP_TABLE: Vec<Vec<Vec<JubJubExtended>>> =
         generate_pedersen_hash_exp_table();
+
+    /// The pre-computed window tables `[-4, 3, 2, 1, 1, 2, 3, 4]` of different magnitudes
+    /// of the Pedersen hash segment generators.
+    pub static ref PEDERSEN_CIRCUIT_GENERATORS: Vec<Vec<Vec<(BlsScalar, BlsScalar)>>> =
+        generate_pedersen_circuit_generators();
 }
 
 // The number of bits needed to represent the modulus, from zkcrypto/jubjub
@@ -140,3 +145,89 @@ fn generate_pedersen_hash_exp_table() -> Vec<Vec<Vec<JubJubExtended>>> {
         })
         .collect()
 }
+
+fn generate_pedersen_circuit_generators() -> Vec<Vec<Vec<(BlsScalar, BlsScalar)>>> {
+    // Process each segment
+    PEDERSEN_HASH_GENERATORS
+        .iter()
+        .cloned()
+        .map(|gen_affine| {
+            let mut gen = JubJubExtended::from(gen_affine);
+            let mut windows = vec![];
+
+            for _ in 0..PEDERSEN_HASH_CHUNKS_PER_GENERATOR {
+                // Create (x, y) coeffs for this chunk
+                let mut coeffs = vec![];
+                let mut g = gen.clone();
+
+                // coeffs = g, g*2, g*3, g*4
+                for _ in 0..4 {
+                    coeffs.push(
+                        to_montgomery_coords(g.into())
+                            .expect("we never encounter the point at infinity"),
+                    );
+                    g += gen;
+                }
+                windows.push(coeffs);
+
+                // Our chunks are separated by 2 bits to prevent overlap.
+                for _ in 0..4 {
+                    gen = gen.double();
+                }
+            }
+
+            windows
+        })
+        .collect()
+}
+
+
+/// Returns the coordinates of this point's Montgomery curve representation, or `None` if
+/// it is the point at infinity.
+pub fn to_montgomery_coords(g: JubJubExtended) -> Option<(BlsScalar, BlsScalar)> {
+    let g = JubJubAffine::from(g);
+    let (x, y) = (g.get_x(), g.get_y());
+
+    if y == BlsScalar::one() {
+        // The only solution for y = 1 is x = 0. (0, 1) is the neutral element, so we map
+        // this to the point at infinity.
+        None
+    } else {
+        // The map from a twisted Edwards curve is defined as
+        // (x, y) -> (u, v) where
+        //      u = (1 + y) / (1 - y)
+        //      v = u / x
+        //
+        // This mapping is not defined for y = 1 and for x = 0.
+        //
+        // We have that y != 1 above. If x = 0, the only
+        // solutions for y are 1 (contradiction) or -1.
+        if bool::from(x.is_zero()) {
+            // (0, -1) is the point of order two which is not
+            // the neutral element, so we map it to (0, 0) which is
+            // the only affine point of order 2.
+            Some((BlsScalar::zero(), BlsScalar::zero()))
+        } else {
+            // The mapping is defined as above.
+            //
+            // (x, y) -> (u, v) where
+            //      u = (1 + y) / (1 - y)
+            //      v = u / x
+
+            let u = (BlsScalar::one() + y) * (BlsScalar::one() - y).invert().unwrap();
+            let v = u * x.invert().unwrap();
+
+            // Scale it into the correct curve constants
+            // scaling factor = sqrt(4 / (a - d))
+            Some((u, v * MONTGOMERY_SCALE))
+        }
+    }
+}
+
+/// The scaling factor used for conversion to and from the Montgomery form.
+pub const MONTGOMERY_SCALE: BlsScalar = BlsScalar::from_raw([
+    0x8f45_35f7_cf82_b8d9,
+    0xce40_6970_3da8_8abd,
+    0x31de_341e_77d7_64e5,
+    0x2762_de61_e862_645e,
+]);

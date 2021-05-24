@@ -181,64 +181,128 @@ impl StandardComposer {
     }
 
     /// Pedersen hash using Plookup
-    pub fn pedersen_hash_to_point(&mut self, message: &[u8]) -> JubJubAffine {
+    pub fn pedersen_hash_to_point(&mut self, personalization: &[bool], bits: &[bool]) -> Point {
 
-        let pad = vec![0u8; 3 - (message.len() % 3)];
-        let message_prime = [message, &pad[..]].concat();
-        /*
-        let chunks = message_prime
-            // break into chunks of length 3
-            .chunks(3)
-            // compute the encoding for each
-            .map(|chunk|
-                // compute X_s
-                self.add_gate(
-                    (BlsScalar::)
-                )
-            )
-            .collect::<Vec<u8>>();
+        assert_eq!(personalization.len(), 6);
+    
+        let mut edwards_result = Point::from_private_affine(self, JubJubExtended::identity().into());
+        let mut bits = personalization.iter().chain(bits.iter()).peekable();
+        let mut segment_generators = constants::PEDERSEN_CIRCUIT_GENERATORS.iter();
+    
+        let mut segment_i = 0;
+        while bits.peek().is_some() {
+            let mut segment_result = Point::from_private_affine(self, JubJubExtended::identity().into());
+            let mut segment_windows = &segment_generators.next().expect("enough segments")[..];
+    
+            let mut window_i = 0;
+
+            // uses edwards rather than montgomery coordinates
+            while let Some(a) = bits.next() {
+                let b = bits.next().unwrap_or(&false);
+                let c = bits.next().unwrap_or(&false);
+
+                let s0 = self.add_input(BlsScalar::from(*a as u64));
+                let s1 = self.add_input(BlsScalar::from(*b as u64));
+                let s2 = self.add_input(BlsScalar::from(*c as u64));
+
+                // constrain to bits
+                self.boolean_gate(s0);
+                self.boolean_gate(s1);
+                self.boolean_gate(s2);
+
+                // compute the index of the correct generator multiple: g, 2g, 3g, or 4g
+                let gen_index: usize = (1 + (*a as u8) + 2 * (*b as u8)).into();
+
+                // get coordinates of the selected generator
+                let (xs_val, yr_val) = segment_windows[0][gen_index];
+
+                // coordinates for each of g, 2g, 3g, and 4g
+                let x1 = BlsScalar::from(segment_windows[0][0].0);
+                let x2 = BlsScalar::from(segment_windows[0][1].0);
+                let x3 = BlsScalar::from(segment_windows[0][2].0);
+                let x4 = BlsScalar::from(segment_windows[0][3].0);
+
+                let y1 = BlsScalar::from(segment_windows[0][0].1);
+                let y2 = BlsScalar::from(segment_windows[0][1].1);
+                let y3 = BlsScalar::from(segment_windows[0][2].1);
+                let y4 = BlsScalar::from(segment_windows[0][3].1);
+
+                // get point P_r = (xs, yr) in Point form
+                let pr = Point::from_public_affine(
+                    self,
+                    JubJubAffine::from_raw_unchecked(xs_val, yr_val)
+                );
+
+                // compute ys
+                let ys_val = match c {
+                    true => -yr_val,
+                    false => yr_val,
+                };
+
+                // get point P_s = (xs, ys) in Point form
+                let ps = Point::from_public_affine(
+                    self,
+                    JubJubAffine::from_raw_unchecked(xs_val, ys_val)
+                );
+
+                // 2 bit lookup for x coordinate
+                self.poly_gate(
+                    s0,
+                    s1,
+                    *pr.x(),
+                    x4 + x1 - x2 - x3,
+                    x2 - x1,
+                    x3 - x1,
+                    BlsScalar::one(),
+                    x1,
+                    BlsScalar::zero(),
+                );
+
+                // 2 bit lookup for y coordinate
+                self.poly_gate(
+                    s0,
+                    s1,
+                    *pr.y(),
+                    y4 + y1 - y2 - y3,
+                    y2 - y1,
+                    y3 - y1,
+                    BlsScalar::one(),
+                    y1,
+                    BlsScalar::zero(),
+                );
+
+                // conditionally negate generator
+                self.poly_gate(
+                    *pr.y(),
+                    s2,
+                    *ps.y(),
+                    BlsScalar::from(2),
+                    -BlsScalar::one(),
+                    BlsScalar::zero(),
+                    BlsScalar::one(),
+                    BlsScalar::zero(),
+                    BlsScalar::zero(),
+                );
+
+                // add new point to previous result
+                segment_result.fast_add(self, ps);
+
+                segment_windows = &segment_windows[1..];
+
+                if segment_windows.is_empty() {
+                    break;
+                }
+    
+                window_i += 1;
+            }
+
+        // add new point to previous result
+        edwards_result.fast_add(self, segment_result);
+
+        segment_i += 1;
+        }
         
-
-
-        let p = constants::PEDERSEN_HASH_GENERATORS;
-
-        let s0 = self.add_input(BlsScalar::from(*m.next().unwrap() as u64));
-        let s1 = self.add_input(BlsScalar::from(*m.next().unwrap() as u64));
-        let s2 = self.add_input(BlsScalar::from(*m.next().unwrap() as u64));
-
-        // constrain to bits
-        self.boolean_gate(s0);
-        self.boolean_gate(s1);
-        self.boolean_gate(s2);
-
-        /* 
-        To do:
-
-        - Verify the encoding <.> is correctly understood (why the 2^4 ?)
-        - Figure out why the constraint count is the way it is
-
-        - Add gates that compose the bits to get 3-bit value j used in lookup
-        - Compute chunk index k
-        - Compute generator index i
-        - Use 2 plookup gates to lookup j*k*P_i x and y values
-        - Add results to accumulated point
-
-        For each chunk, this will cost:
-        - 3 boolean constraints (if not already constrained)
-
-        - 2 gates to get encoding
-            - 1 to compose 2 lower bits
-            - 1 to multiply by sign bit       
-        - 2 plookup gates
-        - 3 montgomery addition custom gates (which will likely be ~3 internal gates each themselves.)
-        
-
-
-        
-        */
-        */
-        JubJubAffine::identity()
-
+        edwards_result
     }
     
 }
