@@ -108,6 +108,24 @@ lazy_static! {
         generate_pedersen_circuit_generators();
 }
 
+/// The node commitment is randomized again by the position in order to supply the
+/// nullifier computation with a unique input w.r.t. the note being spent, to prevent
+/// Faerie gold attacks.
+pub const NULLIFIER_POSITION_GENERATOR: JubJubAffine = JubJubAffine::from_raw_unchecked(
+    BlsScalar::from_raw([
+        0xaafee844265fc1e7,
+        0x1e09674f28a4b844,
+        0x84678dc2d85293df,
+        0x50de6d98fee5282f,
+    ]),
+    BlsScalar::from_raw([
+        0xed034e3ee13a1eb3,
+        0x226945aee96dfe0a,
+        0xf3f70dc31afe799d,
+        0x03260f0bf1244050,
+    ]),
+);
+
 // The number of bits needed to represent the modulus, from zkcrypto/jubjub
 const MODULUS_BITS: u32 = 252;
 const NUM_BITS: u32 = MODULUS_BITS;

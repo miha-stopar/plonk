@@ -1,9 +1,9 @@
 #![allow(clippy::too_many_arguments)]
 
-use crate::constraint_system::StandardComposer;
-use crate::constraint_system::Variable;
+use crate::constraint_system::{StandardComposer, Variable};
 use dusk_bls12_381::BlsScalar;
 use crate::constraint_system::ecc::Point;
+use crate::constraint_system::ecc::scalar_mul::fixed_base::scalar_mul;
 use dusk_jubjub::{JubJubAffine, JubJubExtended, JubJubScalar};
 use std::convert::TryInto;
 use crate::constraint_system::masp::constants;
@@ -183,12 +183,12 @@ impl StandardComposer {
     /// Pedersen hash using Plookup
     pub fn pedersen_hash_to_point(&mut self, personalization: &[bool], bits: &[bool]) -> Point {
 
-        assert_eq!(personalization.len(), 6);
+        //assert_eq!(personalization.len(), 6);
     
         let mut edwards_result = Point::from_private_affine(self, JubJubExtended::identity().into());
         let mut bits = personalization.iter().chain(bits.iter()).peekable();
         let mut segment_generators = constants::PEDERSEN_CIRCUIT_GENERATORS.iter();
-    
+        println!("{:?}", &constants::PEDERSEN_CIRCUIT_GENERATORS[0][0..8]);
         let mut segment_i = 0;
         while bits.peek().is_some() {
             let mut segment_result = Point::from_private_affine(self, JubJubExtended::identity().into());
@@ -211,10 +211,11 @@ impl StandardComposer {
                 self.boolean_gate(s2);
 
                 // compute the index of the correct generator multiple: g, 2g, 3g, or 4g
-                let gen_index: usize = (1 + (*a as u8) + 2 * (*b as u8)).into();
+                let gen_index: usize = ((*a as u8) + 2 * (*b as u8)).into();
 
                 // get coordinates of the selected generator
                 let (xs_val, yr_val) = segment_windows[0][gen_index];
+                println!("x: {:?}, y: {:?}", xs_val, yr_val);
 
                 // coordinates for each of g, 2g, 3g, and 4g
                 let x1 = BlsScalar::from(segment_windows[0][0].0);
@@ -285,7 +286,9 @@ impl StandardComposer {
                 );
 
                 // add new point to previous result
-                segment_result.fast_add(self, ps);
+                println!("segment: {:?} chunk: {:?} psx: {:?} psy {:?}", segment_i, window_i,  self.variables[&segment_result.x()],  self.variables[&segment_result.y()]);
+                segment_result = segment_result.fast_add(self, ps);
+                println!("segment: {:?} chunk: {:?} psx: {:?} psy {:?}", segment_i, window_i,  self.variables[&segment_result.x()],  self.variables[&segment_result.y()]);
 
                 segment_windows = &segment_windows[1..];
 
@@ -297,12 +300,18 @@ impl StandardComposer {
             }
 
         // add new point to previous result
-        edwards_result.fast_add(self, segment_result);
+        edwards_result = edwards_result.fast_add(self, segment_result);
 
         segment_i += 1;
         }
         
         edwards_result
+    }
+
+    /// Mixing Pedersen Hash function for computing rho
+    pub fn mixing_pedersen_hash(&mut self, p: Point, x: Variable) -> Point {
+        let mix_in = scalar_mul(self, x, constants::NULLIFIER_POSITION_GENERATOR.into());
+        mix_in.point().fast_add(self, p)
     }
     
 }
@@ -312,10 +321,14 @@ mod tests {
     use crate::constraint_system::StandardComposer;
     #[test]
     fn test_masp_components() {
-        let message: [u8; 7] = [0, 1, 1, 0, 0, 1, 0];
+        let personalization: &[bool] = &vec![0]
+            .iter().map(|u| *u != 0).collect::<Vec<bool>>();
+        let message: &[bool] = &vec![0]
+            .iter().map(|u| *u != 0).collect::<Vec<bool>>();;
         let mut cs = StandardComposer::new();
-        cs.pedersen_hash_to_point(&message[..]);        
-
+        let result = cs.pedersen_hash_to_point(personalization, message);
+        
+        println!("x: {:?}\ny: {:?}", cs.variables[&result.x()], cs.variables[&result.y()]);
         assert!(0==1);
     }
 }
