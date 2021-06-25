@@ -489,6 +489,74 @@ mod tests {
     use crate::proof_system::{Prover, Verifier};
 
     #[test]
+    fn bus() {
+        let res = gadget_tester(
+            |composer| {
+
+                // Build a table of valid operations:
+                composer.lookup_table.0.push([
+                    BlsScalar::from(1 as u64),
+                    BlsScalar::from(1 as u64),
+                    BlsScalar::from(2 as u64),
+                    BlsScalar::from(2 as u64),
+                ]);
+
+                composer.lookup_table.0.push([
+                    BlsScalar::from(0 as u64),
+                    BlsScalar::from(3 as u64),
+                    BlsScalar::from(17 as u64),
+                    BlsScalar::from(2 as u64),
+                ]);
+                // End of building valid operations.
+
+                // Note 1: lookup_table supports 3 or 4 columns, for more columns some changes are needed.
+                // What about halo2?
+
+                // Build witness:
+                let mut ops: Vec<[Variable; 4]> = vec![];
+                // [memory_flag, index, value, step]
+                let op1: [Variable; 4] = [
+                    composer.add_input(BlsScalar::from(1 as u64)),
+                    composer.add_input(BlsScalar::from(1 as u64)),
+                    composer.add_input(BlsScalar::from(2 as u64)),
+                    composer.add_input(BlsScalar::from(2 as u64))
+                ];
+                ops.push(op1);
+                let op2: [Variable; 4] = [
+                    composer.add_input(BlsScalar::from(0 as u64)),
+                    composer.add_input(BlsScalar::from(3 as u64)),
+                    composer.add_input(BlsScalar::from(17 as u64)),
+                    composer.add_input(BlsScalar::from(2 as u64))
+                ];
+                ops.push(op2);
+                // End of building a witness.
+
+                // Note 2: it seems like halo2 supports writing custom constraints easily
+                // (as simple as adding x * (x-1) to the function call for boolean gate)?
+                // That would mean much less code for new constraints compared to what needs
+                // to be done for new constraints in dusk plonk.
+
+                for i in 0..ops.len() {
+                    // Check if memory flag is boolean:
+                    composer.boolean_gate(ops[i][0]);
+                    composer.plookup_gate(
+                        ops[i][0],
+                        ops[i][1],
+                        ops[i][2],
+                        Some(ops[i][3]),
+                        BlsScalar::zero(),
+                    );
+
+                    // Note 3: do we now add new valid rows (based on the current state) to the plookup table?
+                }
+            },
+            512,
+        );
+
+        assert!(res.is_ok());
+    }
+
+    #[test]
     fn xor_plookup() {
         let res = gadget_tester(
             |composer| {
